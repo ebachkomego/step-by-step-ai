@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "cd frontend && npm install && npm run build"
+    "build": "cd frontend && npm install && npm run build && (cp -r dist ../dist 2>/dev/null || xcopy /E /I /Y dist ..\\dist 2>nul || true)",
+    "vercel-build": "cd frontend && npm install && npm run build && (cp -r dist ../dist 2>/dev/null || true)"
   }
 }
