@@ -29,11 +29,15 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
   let pois: any[] = [];
   for (const url of OVERPASS_URLS) {
     try {
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 3500);
       const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: `data=${encodeURIComponent(query)}`,
+        signal: controller.signal,
       });
+      clearTimeout(tId);
       if (resp.ok) {
         const json = await resp.json();
         if (json.elements && json.elements.length > 0) {
@@ -42,7 +46,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
         }
       }
     } catch (e) {
-      // try next mirror
+      // try next mirror or fallback
     }
   }
 

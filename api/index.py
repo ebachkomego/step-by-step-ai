@@ -1,9 +1,9 @@
 import logging
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.schemas import RouteRequest, RouteResponse
 from api.services.poi_service import fetch_pois
-from api.services.llm_service import plan_route_with_llm, SCENARIO_CONFIGS
+from api.services.llm_service import plan_route_with_llm, SCENARIO_CONFIGS, fallback_select_stops
 from api.services.router_service import build_walking_route
 
 logging.basicConfig(level=logging.INFO)
@@ -42,7 +42,7 @@ async def get_scenarios():
 @app.post("/api/generate-route", response_model=RouteResponse)
 async def generate_route_endpoint(request: RouteRequest):
     try:
-        # 1. Поиск POI
+        # 1. Поиск POI (с быстрым таймаутом и авто-fallback)
         pois = await fetch_pois(
             lat=request.start_lat,
             lon=request.start_lon,
@@ -60,7 +60,7 @@ async def generate_route_endpoint(request: RouteRequest):
         )
 
         if not stops:
-            raise HTTPException(status_code=404, detail="Не удалось подобрать подходящие точки")
+            stops = fallback_select_stops(pois, request.start_lat, request.start_lon, request.duration_minutes, request.scenario)
 
         # 3. Пешеходный трек OSRM
         geojson, total_distance, walking_minutes = await build_walking_route(
@@ -87,8 +87,23 @@ async def generate_route_endpoint(request: RouteRequest):
             used_ai=used_ai,
             ai_model=ai_model
         )
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Fallback due to: {e}", exc_info=True)
+        # Отказоустойчивый ответ даже в случае неожиданного сбоя
+        pois = await fetch_pois(request.start_lat, request.start_lon, request.duration_minutes)
+        stops = fallback_select_stops(pois, request.start_lat, request.start_lon, request.duration_minutes, request.scenario)
+        geojson, total_distance, walking_minutes = await build_walking_route(
+            request.start_lat, request.start_lon, stops, request.is_circular
+        )
+        total_spent = sum(s.spent_minutes for s in stops)
+        return RouteResponse(
+            total_walking_minutes=walking_minutes,
+            total_distance_meters=total_distance,
+            total_route_minutes=walking_minutes + total_spent,
+            stops=stops,
+            geojson=geojson,
+            scenario=request.scenario,
+            scenario_title="Прогулка",
+            used_ai=False,
+            ai_model="Geospatial Walk Engine"
+        )

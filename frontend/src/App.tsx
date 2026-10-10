@@ -3,6 +3,7 @@ import { MapView } from './components/MapView';
 import { BottomSheet } from './components/BottomSheet';
 import type { RouteRequest, RouteResponse } from './types';
 import { Sun, Moon, Navigation, AlertCircle } from 'lucide-react';
+import { generateRouteClientFallback } from './services/clientRouteEngine';
 
 export const App: React.FC = () => {
   // Тема оформления (Светлая / Темная)
@@ -84,13 +85,14 @@ export const App: React.FC = () => {
     try {
       let data: RouteResponse | null = null;
 
+      // 1. Попытка запроса к бэкенду (таймаут 3.5 сек)
       try {
         const apiUrl = window.location.hostname === 'localhost'
           ? 'http://localhost:8000/api/generate-route'
           : '/api/generate-route';
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 сек таймаут
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
 
         const response = await fetch(apiUrl, {
           method: 'POST',
@@ -105,19 +107,23 @@ export const App: React.FC = () => {
           data = await response.json();
         }
       } catch (backendErr) {
-        console.warn('Backend unavailable, using client geospatial engine:', backendErr);
+        console.warn('Backend request bypassed or timed out, using client walk engine.');
       }
 
-      // Если бэкенд не ответил или вернул 500, используем отказоустойчивый клиентский движок
+      // 2. Если бэкенд недоступен или вернул 500, моментально используем клиентский движок
       if (!data) {
-        const { generateRouteClientFallback } = await import('./services/clientRouteEngine');
         data = await generateRouteClientFallback(params);
       }
 
       setRouteData(data);
     } catch (err: any) {
       console.error('Failed to generate route:', err);
-      setErrorMessage(err.message || 'Не удалось построить маршрут. Попробуйте еще раз.');
+      try {
+        const fallbackData = await generateRouteClientFallback(params);
+        setRouteData(fallbackData);
+      } catch (e) {
+        setErrorMessage('Не удалось построить маршрут. Попробуйте еще раз.');
+      }
     } finally {
       setIsLoading(false);
     }
