@@ -82,22 +82,38 @@ export const App: React.FC = () => {
     setActiveStopIndex(null);
 
     try {
-      const apiUrl = window.location.hostname === 'localhost'
-        ? 'http://localhost:8000/api/generate-route'
-        : '/api/generate-route';
+      let data: RouteResponse | null = null;
 
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params),
-      });
+      try {
+        const apiUrl = window.location.hostname === 'localhost'
+          ? 'http://localhost:8000/api/generate-route'
+          : '/api/generate-route';
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Ошибка сервера (${response.status})`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 сек таймаут
+
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(params),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          data = await response.json();
+        }
+      } catch (backendErr) {
+        console.warn('Backend unavailable, using client geospatial engine:', backendErr);
       }
 
-      const data: RouteResponse = await response.json();
+      // Если бэкенд не ответил или вернул 500, используем отказоустойчивый клиентский движок
+      if (!data) {
+        const { generateRouteClientFallback } = await import('./services/clientRouteEngine');
+        data = await generateRouteClientFallback(params);
+      }
+
       setRouteData(data);
     } catch (err: any) {
       console.error('Failed to generate route:', err);
