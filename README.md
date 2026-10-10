@@ -62,9 +62,10 @@
    ```
    *(Или выполните в терминале: `git push -u origin main`). Все коммиты уже сформированы!*
 
-### 2. Деплой на Vercel:
-В проект уже добавлен файл `vercel.json` с конфигурацией сборки Frontend + Python Serverless:
-1. Зайдите на [vercel.com](https://vercel.com) под своим аккаунтом.
-2. Нажмите **Add New... -> Project**.
-3. Выберите ваш репозиторий `ebachkomego/step-by-step-ai`.
-4. Нажмите кнопку **Deploy**! Vercel автоматически соберет проект и выдаст ссылку на рабочий сайт вида `https://step-by-step-ai-*.vercel.app`.
+### 2. Деплой на Vercel (в 1 клик):
+В проект уже добавлен файл `vercel.json` с конфигурацией сборки Frontend + Python Serverless.
+
+👉 **Прямая ссылка для деплоя в 1 клик:**
+**[https://vercel.com/new/clone?repository-url=https://github.com/ebachkomego/step-by-step-ai](https://vercel.com/new/clone?repository-url=https://github.com/ebachkomego/step-by-step-ai)**
+
+Так как вы уже авторизованы в браузере, достаточно просто перейти по ссылке выше и нажать синюю кнопку **«Deploy»**! Vercel автоматически соберет проект и выдаст ссылку на рабочий сайт вида `https://step-by-step-ai-*.vercel.app`.
