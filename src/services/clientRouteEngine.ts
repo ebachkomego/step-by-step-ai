@@ -262,7 +262,7 @@ ${JSON.stringify(simplifiedCandidates, null, 2)}
           scenario_title: parsed.scenario_title || scenarioName,
           ai_thought: parsed.ai_thought || 'Нейросеть подобрала уютные локации, чтобы посидеть, отдохнуть и пообщаться в спокойном темпе.',
           stops: parsed.stops,
-          model: 'StepByStep Neural AI (Reasoning Engine)',
+          model: 'Google Gemini 2.5 Flash',
         };
       }
     }
@@ -395,7 +395,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
   let selectedStops: { name: string; cat: string; lat: number; lon: number; spent: number; desc: string }[] = [];
   let aiThought: string | undefined;
   let customTitle: string | undefined;
-  let usedModelName = 'StepByStep AI Architect';
+  let usedModelName = 'Google Gemini 2.5 Flash';
 
   // 1. Вызываем нейросеть для продумывания маршрута и комфортных остановок
   const llmPlan = await planRouteWithAI(

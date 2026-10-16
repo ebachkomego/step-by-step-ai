@@ -1,23 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import type { RouteResponse, RouteRequest } from '../types';
 import { 
   Heart, 
   Landmark, 
   Coffee, 
   Dog, 
-  MapPin, 
   Clock, 
   Footprints, 
   RotateCcw, 
   Compass, 
   Navigation,
   ExternalLink,
-  Sparkles,
-  ChevronDown,
-  ChevronUp,
-  Sliders,
-  Send,
-  Key
+  Sparkles
 } from 'lucide-react';
 import { calculateStopCount } from '../services/clientRouteEngine';
 
@@ -77,14 +71,17 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   onSelectStop,
   onSubmit,
   onReset,
-  onCurrentLocation,
   isTrackingUser,
   onToggleTracking,
 }) => {
   const [scenario, setScenario] = useState<string>('date');
   const [duration, setDuration] = useState<number>(60);
   const [isCircular, setIsCircular] = useState<boolean>(true);
-  // Состояния шторки: 'collapsed' (свернуто), 'normal' (стандартное), 'expanded' (во весь экран)
+
+  // 3 положения шторки в точности как в Яндекс Картах:
+  // 1) 'collapsed' — полностью убранная (торчит только верхняя строка ~64px)
+  // 2) 'normal' — на половину экрана (~50vh)
+  // 3) 'expanded' — на весь экран (~92vh)
   const [sheetState, setSheetState] = useState<'collapsed' | 'normal' | 'expanded'>('normal');
 
   // Кастомный промпт нейросети и выбранные активности
@@ -92,9 +89,35 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   const [selectedActivities, setSelectedActivities] = useState<string[]>(['coffee', 'nature']);
   const [manualStopCount, setManualStopCount] = useState<number>(0); // 0 = авто
 
-  // Личный API-ключ Gemini (сохраняется в localStorage)
-  const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('sbs_gemini_key') || '');
-  const [showKeyField, setShowKeyField] = useState<boolean>(false);
+  // Отслеживание свайпов / перетаскивания островка
+  const touchStartY = useRef<number | null>(null);
+
+  const handleDragStart = (clientY: number) => {
+    touchStartY.current = clientY;
+  };
+
+  const handleDragEnd = (clientY: number) => {
+    if (touchStartY.current === null) return;
+    const deltaY = clientY - touchStartY.current;
+    touchStartY.current = null;
+
+    if (deltaY < -30) {
+      // Свайп ВВЕРХ (раскрыть больше)
+      if (sheetState === 'collapsed') setSheetState('normal');
+      else if (sheetState === 'normal') setSheetState('expanded');
+    } else if (deltaY > 30) {
+      // Свайп ВНИЗ (свернуть)
+      if (sheetState === 'expanded') setSheetState('normal');
+      else if (sheetState === 'normal') setSheetState('collapsed');
+    }
+  };
+
+  // Клик по островку переключает режимы
+  const handlePillClick = () => {
+    if (sheetState === 'collapsed') setSheetState('normal');
+    else if (sheetState === 'normal') setSheetState('expanded');
+    else setSheetState('normal');
+  };
 
   const toggleActivity = (id: string) => {
     setSelectedActivities((prev) =>
@@ -112,9 +135,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
       custom_prompt: customPrompt.trim() || undefined,
       activities: selectedActivities,
       stop_count: manualStopCount > 0 ? manualStopCount : undefined,
-      api_key: apiKey.trim() || undefined,
     });
-    // При построении разворачиваем шторку в стандартный или расширенный вид
     setSheetState('normal');
   };
 
@@ -129,55 +150,52 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
     window.open(url, '_blank');
   };
 
-  // Переключение состояния шторки по клику на ручку
-  const cycleSheetState = () => {
-    if (sheetState === 'collapsed') setSheetState('normal');
-    else if (sheetState === 'normal') setSheetState('expanded');
-    else setSheetState('collapsed');
-  };
-
   // Рассчитанное количество остановок
   const effectiveStops = calculateStopCount(duration, manualStopCount);
 
-  // Классы высоты в зависимости от sheetState
+  // Классы высоты для 3 положений шторки (Яндекс Карты стиль)
   const heightClasses = {
-    collapsed: 'h-[76px] overflow-hidden',
-    normal: 'h-[55vh] md:h-[50vh]',
-    expanded: 'h-[88vh]',
+    collapsed: 'h-[64px]',
+    normal: 'h-[50vh]',
+    expanded: 'h-[92vh]',
   }[sheetState];
 
   return (
     <div
-      className={`fixed bottom-0 inset-x-0 mx-auto w-full max-w-xl bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl shadow-2xl rounded-t-3xl border-t border-neutral-200/80 dark:border-neutral-800 transition-all duration-300 ease-out z-30 flex flex-col ${heightClasses}`}
+      className={`fixed bottom-0 inset-x-0 mx-auto w-full max-w-xl bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl shadow-2xl rounded-t-3xl border-t border-neutral-200/80 dark:border-neutral-800 transition-all duration-300 ease-out z-30 flex flex-col overflow-hidden ${heightClasses}`}
     >
-      {/* 1. Верхняя полоска-ручка для свайпа / клика */}
+      {/* 1. Верхняя полоска-ручка с островком (Яндекс Карты) — поддерживает клик и свайпы */}
       <div
-        onClick={cycleSheetState}
-        className="w-full pt-3 pb-2 flex flex-col items-center justify-center cursor-pointer select-none group shrink-0"
+        onClick={handlePillClick}
+        onTouchStart={(e) => handleDragStart(e.touches[0].clientY)}
+        onTouchEnd={(e) => handleDragEnd(e.changedTouches[0].clientY)}
+        onMouseDown={(e) => handleDragStart(e.clientY)}
+        onMouseUp={(e) => handleDragEnd(e.clientY)}
+        className="w-full pt-2.5 pb-2 flex flex-col items-center justify-center cursor-grab active:cursor-grabbing select-none shrink-0 group hover:bg-neutral-100/50 dark:hover:bg-neutral-800/50 transition-colors"
       >
-        <div className="w-12 h-1.5 bg-neutral-300 dark:bg-neutral-700 rounded-full group-hover:bg-neutral-400 transition-colors" />
-        
-        {/* Кнопка с подсказкой свернутого состояния */}
+        {/* Фирменный островок Яндекс Карт */}
+        <div className="w-14 h-1.5 bg-neutral-300 dark:bg-neutral-600 rounded-full group-hover:bg-neutral-400 dark:group-hover:bg-neutral-500 transition-colors" />
+
+        {/* Если шторка полностью убрана (collapsed) — видна строка-заголовок */}
         {sheetState === 'collapsed' && (
-          <div className="flex items-center justify-between w-full px-5 mt-1">
-            <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">
-              {routeData ? `${routeData.scenario_title} • ${routeData.total_route_minutes} мин` : 'Куда пойдем сегодня?'}
+          <div className="flex items-center justify-between w-full px-5 mt-1.5 cursor-pointer">
+            <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 truncate">
+              {routeData ? `${routeData.scenario_title} • ${routeData.total_route_minutes} мин` : 'Куда пойдем? Нажмите, чтобы открыть'}
             </span>
-            <div className="flex items-center gap-1 text-[11px] font-semibold text-amber-500">
-              <span>Развернуть</span>
-              <ChevronUp className="w-3.5 h-3.5" />
-            </div>
+            <span className="text-[11px] font-bold text-amber-500 whitespace-nowrap pl-2">
+              Потяните вверх ↑
+            </span>
           </div>
         )}
       </div>
 
-      {/* 2. Контентная часть со скроллом */}
+      {/* 2. Контентная часть шторки со скроллом */}
       {sheetState !== 'collapsed' && (
         <div className="px-5 pb-6 overflow-y-auto space-y-4 flex-1">
           {!routeData ? (
             /* ================= ЭКРАН НАСТРОЙКИ МАРШРУТА ================= */
             <>
-              {/* Шапка: Текущий адрес + геолокация */}
+              {/* Шапка: Адрес + статус GPS (БЕЗ лишних стрелочек) */}
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-black tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
@@ -197,29 +215,20 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={onToggleTracking}
-                    title={isTrackingUser ? 'Слежение за GPS включено' : 'Включить авто-слежение'}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-full flex items-center gap-1.5 transition-all ${
-                      isTrackingUser
-                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-300/50'
-                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200'
-                    }`}
-                  >
-                    <Navigation className={`w-3.5 h-3.5 ${isTrackingUser ? 'animate-spin' : ''}`} />
-                    <span>{isTrackingUser ? 'Следить' : 'Мое место'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setSheetState(sheetState === 'expanded' ? 'normal' : 'expanded')}
-                    className="p-1.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
-                  >
-                    {sheetState === 'expanded' ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                  </button>
-                </div>
+                {/* Кнопка режима слежения */}
+                <button
+                  type="button"
+                  onClick={onToggleTracking}
+                  title={isTrackingUser ? 'Слежение за GPS включено' : 'Включить авто-слежение'}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-full flex items-center gap-1.5 transition-all cursor-pointer ${
+                    isTrackingUser
+                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-300/50'
+                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200'
+                  }`}
+                >
+                  <Navigation className={`w-3.5 h-3.5 ${isTrackingUser ? 'animate-spin' : ''}`} />
+                  <span>{isTrackingUser ? 'Следить' : 'Мое место'}</span>
+                </button>
               </div>
 
               {/* 1. Индивидуальный промпт для нейросети */}
@@ -244,7 +253,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                     <button
                       type="button"
                       onClick={() => setCustomPrompt('')}
-                      className="absolute right-2.5 top-2.5 text-neutral-400 hover:text-neutral-600 text-xs"
+                      className="absolute right-2.5 top-2.5 text-neutral-400 hover:text-neutral-600 text-xs cursor-pointer"
                     >
                       ✕
                     </button>
@@ -258,61 +267,11 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                       key={idea}
                       type="button"
                       onClick={() => setCustomPrompt(idea)}
-                      className="text-[10px] px-2.5 py-1 rounded-lg bg-white/80 dark:bg-neutral-900/80 text-neutral-600 dark:text-neutral-300 border border-amber-200/50 dark:border-neutral-700 whitespace-nowrap hover:bg-amber-100 transition-colors"
+                      className="text-[10px] px-2.5 py-1 rounded-lg bg-white/80 dark:bg-neutral-900/80 text-neutral-600 dark:text-neutral-300 border border-amber-200/50 dark:border-neutral-700 whitespace-nowrap hover:bg-amber-100 transition-colors cursor-pointer"
                     >
                       {idea}
                     </button>
                   ))}
-                </div>
-
-                {/* Подключение / статус личного Gemini API ключа */}
-                <div className="pt-1 border-t border-amber-200/40 dark:border-neutral-700/60">
-                  <button
-                    type="button"
-                    onClick={() => setShowKeyField(!showKeyField)}
-                    className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-600 dark:text-neutral-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors cursor-pointer"
-                  >
-                    <Key className="w-3.5 h-3.5 text-amber-500" />
-                    <span>{apiKey ? '✓ Личный ключ Gemini подключен' : 'Подключить личный Google Gemini API ключ'}</span>
-                  </button>
-
-                  {showKeyField && (
-                    <div className="mt-2 p-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-amber-300/70 dark:border-neutral-700 space-y-1.5 animate-in fade-in">
-                      <div className="flex items-center justify-between text-[10px] text-neutral-500">
-                        <span>Google Gemini API Key:</span>
-                        {apiKey && <span className="text-emerald-500 font-bold">Активен (Google 2.0/2.5 Flash)</span>}
-                      </div>
-                      <div className="flex gap-2">
-                        <input
-                          type="password"
-                          value={apiKey}
-                          onChange={(e) => {
-                            const val = e.target.value.trim();
-                            setApiKey(val);
-                            if (val) localStorage.setItem('sbs_gemini_key', val);
-                            else localStorage.removeItem('sbs_gemini_key');
-                          }}
-                          placeholder="Вставьте AIzaSy..."
-                          className="flex-1 text-xs px-2.5 py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 font-mono text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-400"
-                        />
-                        {apiKey && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setApiKey('');
-                              localStorage.removeItem('sbs_gemini_key');
-                            }}
-                            className="text-[10px] px-2 py-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer font-medium"
-                          >
-                            Сбросить
-                          </button>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-neutral-400 leading-tight">
-                        Ключ сохраняется в вашем браузере. Если ключ не указан, автоматически работает встроенная быстрая нейросеть.
-                      </p>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -330,7 +289,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                         key={sc.id}
                         type="button"
                         onClick={() => setScenario(sc.id)}
-                        className={`p-2.5 rounded-2xl text-left border transition-all ${
+                        className={`p-2.5 rounded-2xl text-left border transition-all cursor-pointer ${
                           isSelected
                             ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-950 border-neutral-900 dark:border-white shadow-md'
                             : 'bg-neutral-50 dark:bg-neutral-800/60 text-neutral-800 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/60 hover:border-neutral-300'
@@ -365,7 +324,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                         key={act.id}
                         type="button"
                         onClick={() => toggleActivity(act.id)}
-                        className={`text-xs px-3 py-1.5 rounded-xl border transition-all ${
+                        className={`text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
                           active
                             ? 'bg-amber-400 text-neutral-950 font-bold border-amber-400 shadow-sm'
                             : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700 hover:border-neutral-300'
@@ -397,7 +356,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                       key={chip.value}
                       type="button"
                       onClick={() => setDuration(chip.value)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
                         duration === chip.value
                           ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 shadow-sm font-bold'
                           : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200'
@@ -408,27 +367,26 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   ))}
                 </div>
 
-                {/* Ползунок для точной настройки */}
+                {/* Ползунок времени */}
                 <input
                   type="range"
                   min="20"
                   max="180"
-                  step="10"
+                  step="5"
                   value={duration}
                   onChange={(e) => setDuration(Number(e.target.value))}
-                  className="w-full h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-[#FFCC00] mt-2"
+                  className="w-full mt-2 h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-[#FFCC00]"
                 />
               </div>
 
-              {/* 5. Настройка количества остановок (динамически от времени + ручной выбор) */}
-              <div className="p-3 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-200 dark:border-neutral-700/60 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
-                    <Sliders className="w-3.5 h-3.5 text-amber-500" />
-                    Остановки по маршруту:
+              {/* 5. Выбор количества остановок */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+                    Количество остановок
                   </span>
-                  <span className="font-bold text-amber-600 dark:text-amber-400">
-                    {manualStopCount === 0 ? `Авто (${effectiveStops} точек)` : `${manualStopCount} точек`}
+                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                    {manualStopCount === 0 ? `Авто (${effectiveStops})` : `${manualStopCount}`}
                   </span>
                 </div>
 
@@ -445,7 +403,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                       key={btn.val}
                       type="button"
                       onClick={() => setManualStopCount(btn.val)}
-                      className={`flex-1 py-1 text-[11px] font-semibold rounded-lg border transition-all ${
+                      className={`flex-1 py-1 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
                         manualStopCount === btn.val
                           ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 border-neutral-900'
                           : 'bg-white dark:bg-neutral-900 text-neutral-600 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700'
@@ -486,7 +444,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                 {isLoading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-neutral-900/30 border-t-neutral-900 rounded-full animate-spin" />
-                    <span>Нейросеть прокладывает маршрут...</span>
+                    <span>Нейросеть проектирует маршрут...</span>
                   </>
                 ) : (
                   <>
@@ -506,8 +464,8 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                     <span className="text-[11px] font-bold uppercase tracking-wider text-amber-500">
                       {routeData.scenario_title}
                     </span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-semibold">
-                      {routeData.ai_model || 'AI Route'}
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-semibold truncate max-w-[150px]">
+                      {routeData.ai_model || 'Gemini 2.5 Flash'}
                     </span>
                   </div>
 
@@ -534,7 +492,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                 <button
                   type="button"
                   onClick={onReset}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 transition-colors"
+                  className="text-xs font-semibold px-3 py-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 transition-colors cursor-pointer"
                 >
                   Изменить
                 </button>
@@ -546,8 +504,8 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   <div className="flex items-center gap-2 text-xs font-bold text-amber-700 dark:text-amber-400">
                     <Sparkles className="w-4 h-4 text-amber-500 animate-pulse shrink-0" />
                     <span>Замысел прогулки от нейросети</span>
-                    <span className="text-[10px] ml-auto px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 font-semibold truncate max-w-[130px]">
-                      {routeData.ai_model || 'AI Архитектор'}
+                    <span className="text-[10px] ml-auto px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 font-semibold truncate max-w-[140px]">
+                      {routeData.ai_model || 'Gemini 2.5 Flash'}
                     </span>
                   </div>
                   <p className="text-xs leading-relaxed text-neutral-800 dark:text-neutral-200">
@@ -560,7 +518,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               <button
                 type="button"
                 onClick={openInYandexMaps}
-                className="w-full py-3.5 px-4 rounded-2xl bg-[#FC3F1D] hover:bg-[#E53818] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-red-500/20 transition-all active:scale-[0.98]"
+                className="w-full py-3.5 px-4 rounded-2xl bg-[#FC3F1D] hover:bg-[#E53818] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-red-500/20 transition-all active:scale-[0.98] cursor-pointer"
               >
                 <Navigation className="w-4 h-4" />
                 <span>Поехать по маршруту в Яндекс Картах</span>
