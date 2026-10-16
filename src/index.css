@@ -25,15 +25,30 @@
   }
 }
 
-/* Стилизация Яндекс Карт в темной теме */
-.dark .yandex-map-container > ymaps {
-  filter: invert(88%) hue-rotate(180deg) contrast(115%) brightness(95%);
+/* Стилизация Яндекс Карт в темной теме (если используется стандартный слой без native dark tiles) */
+.dark .yandex-map-container:not(.satellite-active):not(.native-dark-layer) [class*="ground-pane"] {
+  filter: invert(92%) hue-rotate(185deg) brightness(85%) contrast(115%) !important;
 }
 
-/* Сохраняем читаемость всплывающих балунов Яндекс Карт в темной теме */
-.dark .yandex-map-container [class*="balloon"] {
-  filter: invert(100%) hue-rotate(180deg);
+/* В темной теме Яндекс Карт - темные стилизованные балуны */
+.dark [class*="balloon__layout"] {
+  background: #1e293b !important;
+  color: #f8fafc !important;
+  border-radius: 16px !important;
+  border: 1px solid #334155 !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
 }
+.dark [class*="balloon__content"] {
+  background: transparent !important;
+  color: #f8fafc !important;
+}
+.dark [class*="balloon__tail"]::after {
+  background: #1e293b !important;
+}
+.dark [class*="balloon__close-button"] {
+  filter: invert(1) brightness(2) !important;
+}
+
 
 /* Кастомный скроллбар */
 ::-webkit-scrollbar {

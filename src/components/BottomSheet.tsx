@@ -13,7 +13,8 @@ import {
   ExternalLink,
   Sparkles,
   MapPin,
-  SlidersHorizontal
+  SlidersHorizontal,
+  History
 } from 'lucide-react';
 import { calculateStopCount } from '../services/clientRouteEngine';
 
@@ -28,6 +29,8 @@ interface BottomSheetProps {
   onReset: () => void;
   isTrackingUser: boolean;
   onToggleTracking: () => void;
+  onOpenHistory?: () => void;
+  historyCount?: number;
 }
 
 const SCENARIOS = [
@@ -74,6 +77,8 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   onReset,
   isTrackingUser,
   onToggleTracking,
+  onOpenHistory,
+  historyCount,
 }) => {
   const [scenario, setScenario] = useState<string>('date');
   const [duration, setDuration] = useState<number>(60);
@@ -215,18 +220,38 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={onToggleTracking}
-                  className={`px-3.5 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 transition-all cursor-pointer ${
-                    isTrackingUser
-                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-300/50'
-                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200'
-                  }`}
-                >
-                  <Navigation className={`w-3.5 h-3.5 ${isTrackingUser ? 'animate-spin' : ''}`} />
-                  <span>{isTrackingUser ? 'Следить' : 'Мое место'}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {onOpenHistory && (
+                    <button
+                      type="button"
+                      onClick={onOpenHistory}
+                      title="История прошлых прогулок"
+                      className="px-3 py-2 text-xs font-bold rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 flex items-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <History className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-300" />
+                      <span>История</span>
+                      {historyCount && historyCount > 0 ? (
+                        <span className="w-4 h-4 rounded-full bg-amber-500 text-neutral-950 text-[10px] font-black flex items-center justify-center">
+                          {historyCount}
+                        </span>
+                      ) : null}
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={onToggleTracking}
+                    title={isTrackingUser ? 'Точка старта привязана к вашему GPS' : 'Привязать старт к вашему GPS'}
+                    className={`px-3.5 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 transition-all cursor-pointer ${
+                      isTrackingUser
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-300/50'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                    }`}
+                  >
+                    <Navigation className={`w-3.5 h-3.5 ${isTrackingUser ? 'text-emerald-500 fill-emerald-500/20' : 'text-neutral-500'}`} />
+                    <span>Моё место</span>
+                  </button>
+                </div>
               </div>
 
               {/* 1. Поле пожелания нейросети (Чистый поисковый вид) */}
@@ -493,13 +518,26 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={onReset}
-                  className="text-xs font-bold px-3.5 py-2 rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors cursor-pointer"
-                >
-                  Изменить
-                </button>
+                <div className="flex items-center gap-2">
+                  {onOpenHistory && (
+                    <button
+                      type="button"
+                      onClick={onOpenHistory}
+                      title="История прошлых прогулок"
+                      className="text-xs font-bold px-3 py-2 rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <History className="w-3.5 h-3.5" />
+                      <span>История</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={onReset}
+                    className="text-xs font-bold px-3.5 py-2 rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors cursor-pointer"
+                  >
+                    Изменить
+                  </button>
+                </div>
               </div>
 
               {/* Замысел маршрута от нейросети */}

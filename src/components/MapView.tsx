@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import type { RouteResponse, RouteStop } from '../types';
+import type { RouteResponse, RouteStop, MapLayerType } from '../types';
+import { Layers, Plus, Minus, Navigation } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -16,7 +17,10 @@ interface MapViewProps {
   onMapClick: (lat: number, lon: number) => void;
   activeStopIndex: number | null;
   isDark: boolean;
+  mapType: MapLayerType;
   isTrackingUser?: boolean;
+  onToggleLayers?: () => void;
+  onLocateUser?: () => void;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -27,7 +31,11 @@ export const MapView: React.FC<MapViewProps> = ({
   routeData,
   onMapClick,
   activeStopIndex,
+  isDark,
+  mapType,
   isTrackingUser = false,
+  onToggleLayers,
+  onLocateUser,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -35,6 +43,52 @@ export const MapView: React.FC<MapViewProps> = ({
   const startPlacemarkRef = useRef<any>(null);
   const routeCollectionRef = useRef<any>(null);
   const isLoadedRef = useRef<boolean>(false);
+
+  // Хелпер применения типа карты (Схема, Спутник, Гибрид, Нативная темная тема Яндекса)
+  const applyMapType = (map: any, type: MapLayerType, dark: boolean) => {
+    if (!map || !window.ymaps) return;
+
+    try {
+      if (type === 'satellite') {
+        map.setType('yandex#satellite');
+      } else if (type === 'hybrid') {
+        map.setType('yandex#hybrid');
+      } else {
+        // Режим 'map' (Схема)
+        if (dark) {
+          try {
+            // Проверяем / регистрируем нативный темный слой Яндекс Карт
+            if (window.ymaps.layer && window.ymaps.layer.storage) {
+              if (!window.ymaps.layer.storage.get('custom#dark')) {
+                window.ymaps.layer.storage.add('custom#dark', function () {
+                  return new window.ymaps.Layer(
+                    'https://core-renderer-tiles.maps.yandex.net/tiles?l=map&theme=dark&%c&%l',
+                    { tileTransparent: false }
+                  );
+                });
+                window.ymaps.mapType.storage.add(
+                  'custom#dark',
+                  new window.ymaps.MapType('Схема (темная)', ['custom#dark'])
+                );
+              }
+              map.setType('custom#dark');
+              return;
+            }
+          } catch (layerErr) {
+            console.warn('Native dark layer registration fallback:', layerErr);
+          }
+          map.setType('yandex#map');
+        } else {
+          map.setType('yandex#map');
+        }
+      }
+    } catch (e) {
+      console.warn('Could not set map type:', e);
+      try {
+        map.setType('yandex#map');
+      } catch (_) {}
+    }
+  };
 
   // 1. Инициализация Яндекс Карт
   useEffect(() => {
@@ -57,6 +111,9 @@ export const MapView: React.FC<MapViewProps> = ({
           });
 
           mapInstanceRef.current = map;
+
+          // Применяем текущий слой (Схема / Спутник / Гибрид / Темный)
+          applyMapType(map, mapType, isDark);
 
           // Коллекция для элементов маршрута (остановки и трек)
           const routeCollection = new window.ymaps.GeoObjectCollection();
@@ -118,13 +175,19 @@ export const MapView: React.FC<MapViewProps> = ({
     };
   }, []);
 
-  // 2. Обновление маркера старта при изменении startLat / startLon
+  // 2. Обновление слоя и темы карты при изменении mapType или isDark
+  useEffect(() => {
+    if (!mapInstanceRef.current || !isLoadedRef.current) return;
+    applyMapType(mapInstanceRef.current, mapType, isDark);
+  }, [mapType, isDark]);
+
+  // 3. Обновление маркера старта при изменении startLat / startLon
   useEffect(() => {
     if (!mapInstanceRef.current || !isLoadedRef.current) return;
     updateStartMarker(mapInstanceRef.current, startLat, startLon);
   }, [startLat, startLon]);
 
-  // 3. Обновление маркера живой геолокации пользователя при изменении userLat / userLon
+  // 4. Обновление маркера живой геолокации пользователя при изменении userLat / userLon
   useEffect(() => {
     if (!mapInstanceRef.current || !isLoadedRef.current) return;
     if (userLat !== null && userLon !== null) {
@@ -137,11 +200,26 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   }, [userLat, userLon, isTrackingUser, routeData]);
 
-  // 4. Отрисовка маршрута при изменении данных или активной остановки
+  // 5. Отрисовка маршрута при изменении данных или активной остановки
   useEffect(() => {
     if (!mapInstanceRef.current || !routeCollectionRef.current || !isLoadedRef.current) return;
     renderRouteObjects(mapInstanceRef.current, routeCollectionRef.current, routeData, activeStopIndex);
   }, [routeData, activeStopIndex]);
+
+  // Хэндлеры для кнопок масштабирования
+  const handleZoomIn = () => {
+    if (mapInstanceRef.current) {
+      const currentZoom = mapInstanceRef.current.getZoom();
+      mapInstanceRef.current.setZoom(currentZoom + 1, { duration: 200 });
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (mapInstanceRef.current) {
+      const currentZoom = mapInstanceRef.current.getZoom();
+      mapInstanceRef.current.setZoom(currentZoom - 1, { duration: 200 });
+    }
+  };
 
   // Хелпер: Обновление / создание маркера старта
   const updateStartMarker = (map: any, lat: number, lon: number) => {
@@ -261,9 +339,62 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
+  const isSatelliteOrHybrid = mapType === 'satellite' || mapType === 'hybrid';
+
   return (
-    <div className="absolute inset-0 w-full h-full yandex-map-container overflow-hidden">
+    <div className={`absolute inset-0 w-full h-full yandex-map-container overflow-hidden ${isSatelliteOrHybrid ? 'satellite-active' : ''} ${isDark && !isSatelliteOrHybrid ? 'native-dark-layer' : ''}`}>
       <div ref={containerRef} className="w-full h-full" />
+
+      {/* Плавающие кнопки управления картой справа (в стиле Яндекс Карт из скриншота) */}
+      <div className="absolute right-4 top-20 z-20 flex flex-col gap-2.5 pointer-events-auto">
+        {/* Кнопка слоев карты */}
+        {onToggleLayers && (
+          <button
+            type="button"
+            onClick={onToggleLayers}
+            title="Слои карты: Схема, Спутник, Гибрид"
+            aria-label="Слои карты"
+            className="w-11 h-11 rounded-2xl bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center justify-center text-neutral-800 dark:text-neutral-200 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+          >
+            <Layers className="w-5 h-5 text-neutral-700 dark:text-neutral-200" />
+          </button>
+        )}
+
+        {/* Зум + / - */}
+        <div className="flex flex-col rounded-2xl overflow-hidden shadow-lg border border-neutral-200/80 dark:border-neutral-800 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md">
+          <button
+            type="button"
+            onClick={handleZoomIn}
+            title="Приблизить карту"
+            aria-label="Приблизить карту"
+            className="w-11 h-11 flex items-center justify-center text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-95 transition-all cursor-pointer border-b border-neutral-200/60 dark:border-neutral-800"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={handleZoomOut}
+            title="Отдалить карту"
+            aria-label="Отдалить карту"
+            className="w-11 h-11 flex items-center justify-center text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-95 transition-all cursor-pointer"
+          >
+            <Minus className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Кнопка Мое местоположение на карте */}
+        {onLocateUser && (
+          <button
+            type="button"
+            onClick={onLocateUser}
+            title="Моё местоположение"
+            aria-label="Моё местоположение"
+            className="w-11 h-11 rounded-2xl bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center justify-center text-neutral-800 dark:text-neutral-200 hover:scale-105 active:scale-95 transition-all cursor-pointer mt-0.5"
+          >
+            <Navigation className={`w-5 h-5 ${isTrackingUser ? 'text-emerald-500 fill-emerald-500/20' : 'text-blue-500'}`} />
+          </button>
+        )}
+      </div>
     </div>
   );
 };

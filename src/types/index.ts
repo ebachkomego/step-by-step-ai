@@ -49,3 +49,23 @@ export interface ScenarioItem {
   icon: string;
   subtitle: string;
 }
+
+export type MapLayerType = 'map' | 'satellite' | 'hybrid';
+
+export interface RouteHistoryItem {
+  id: string;
+  timestamp: number;
+  dateFormatted: string;
+  scenario_title: string;
+  scenario: string;
+  total_route_minutes: number;
+  total_walking_minutes: number;
+  total_distance_meters: number;
+  stopsCount: number;
+  stops: RouteStop[];
+  routeData: RouteResponse;
+  startLat: number;
+  startLon: number;
+  custom_prompt?: string;
+}
+
