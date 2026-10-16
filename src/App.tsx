@@ -316,9 +316,6 @@ export const App: React.FC = () => {
           <span className="font-extrabold text-sm tracking-tight text-neutral-900 dark:text-white">
             StepByStep
           </span>
-          <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest pl-1">
-            Маршруты
-          </span>
         </div>
 
         {/* Кнопки переключения темы, слоев, истории и геолокации */}

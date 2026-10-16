@@ -221,7 +221,7 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
-  // Хелпер: Обновление / создание маркера старта
+  // Хелпер: Обновление / создание маркера старта (минималистичный синий пин)
   const updateStartMarker = (map: any, lat: number, lon: number) => {
     if (startPlacemarkRef.current) {
       startPlacemarkRef.current.geometry.setCoordinates([lat, lon]);
@@ -229,13 +229,15 @@ export const MapView: React.FC<MapViewProps> = ({
       const startPlacemark = new window.ymaps.Placemark(
         [lat, lon],
         {
-          hintContent: 'Точка старта',
-          balloonContentHeader: '<b style="font-size:14px; color:#16a34a">Точка старта</b>',
-          balloonContentBody: '<div style="font-size:12px; margin-top:4px">Отсюда начинается прогулка. Нажмите на карту для выбора другого места.</div>'
+          hintContent: 'Точка старта прогулки',
+          balloonContentHeader: '<b style="font-size:14px; color:#2b79c2">Точка старта</b>',
+          balloonContentBody: '<div style="font-size:12px; margin-top:4px; line-height:1.4">Отсюда начинается ваш пеший маршрут.<br/><span style="color:#64748b">Кликните по карте в любом месте для смены точки старта.</span></div>'
         },
         {
-          preset: 'islands#darkGreenDotIconWithCaption',
-          iconCaption: 'Старт'
+          iconLayout: 'default#image',
+          iconImageHref: '/start-pin.png',
+          iconImageSize: [32, 49],
+          iconImageOffset: [-16, -49]
         }
       );
       map.geoObjects.add(startPlacemark);
