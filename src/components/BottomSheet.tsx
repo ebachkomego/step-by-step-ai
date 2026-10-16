@@ -479,6 +479,22 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                 </button>
               </div>
 
+              {/* Замысел маршрута от нейросети */}
+              {routeData.ai_thought && (
+                <div className="bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-amber-500/5 dark:from-neutral-800 dark:via-neutral-800/80 dark:to-neutral-850 border border-amber-300/50 dark:border-amber-500/30 rounded-2xl p-3.5 shadow-sm space-y-1.5 animate-in fade-in">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-700 dark:text-amber-400">
+                    <Sparkles className="w-4 h-4 text-amber-500 animate-pulse shrink-0" />
+                    <span>Замысел прогулки от нейросети</span>
+                    <span className="text-[10px] ml-auto px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 font-semibold truncate max-w-[130px]">
+                      {routeData.ai_model || 'AI Архитектор'}
+                    </span>
+                  </div>
+                  <p className="text-xs leading-relaxed text-neutral-800 dark:text-neutral-200">
+                    {routeData.ai_thought}
+                  </p>
+                </div>
+              )}
+
               {/* Кнопка навигации в Яндекс Картах */}
               <button
                 type="button"

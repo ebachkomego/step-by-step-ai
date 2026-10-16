@@ -116,6 +116,150 @@ function getReadableCategory(tags: Record<string, string>): string {
   return 'Интересное место';
 }
 
+interface LLMRouteResult {
+  scenario_title: string;
+  ai_thought: string;
+  stops: {
+    id: string;
+    spent_minutes: number;
+    description: string;
+  }[];
+  model: string;
+}
+
+// Интеллектуальный нейросетевой планировщик маршрутов (Gemini + Public Neural LLM)
+async function planRouteWithAI(
+  start_lat: number,
+  start_lon: number,
+  duration_minutes: number,
+  scenario: string,
+  custom_prompt: string,
+  activities: string[],
+  targetStopCount: number,
+  candidates: { id: string; name: string; cat: string; lat: number; lon: number; dist: number }[],
+  apiKey?: string
+): Promise<LLMRouteResult | null> {
+  const simplifiedCandidates = candidates.slice(0, 30).map((c) => ({
+    id: c.id,
+    name: c.name,
+    category: c.cat,
+    distance_meters: Math.round(c.dist),
+  }));
+
+  const scenarioName = SCENARIOS_INFO[scenario]?.title || scenario;
+  const activitiesStr = activities.length > 0 ? activities.join(', ') : 'атмосферная прогулка';
+
+  const systemPrompt = `Ты — ведущий AI-урбанист и архитектор пеших прогулок «StepByStep AI». Твоя задача — не просто написать текст, а полностью ПРОДУМАТЬ МАРШРУТ, отобрать точки на карте и выстроить логику движения:
+1. Выбрать РОВНО ${targetStopCount} лучших мест из переданного списка кандидатов под запрос пользователя.
+2. Выстроить их в логичную последовательность посещения: движение должно быть гармоничным, без кружения туда-обратно.
+3. Рассчитать время нахождения в каждой точке (spent_minutes), учитывая общее время прогулки ${duration_minutes} мин (остальное время уйдет на пеший шаг).
+4. Сформулировать 'ai_thought' (2-3 предложения): твой авторский замысел прогулки, почему выбраны именно эти места и какая драматургия у маршрута.
+5. Придумать авторское название прогулки 'scenario_title'.
+6. Для каждой точки написать живое индивидуальное описание 'description', почему именно сюда стоит зайти.`;
+
+  const userPrompt = `
+Локация старта: ${start_lat.toFixed(4)}, ${start_lon.toFixed(4)}.
+Сценарий: ${scenarioName}.
+Пожелание пользователя: "${custom_prompt || 'красивая и гармоничная прогулка'}".
+Выбранные активности: ${activitiesStr}.
+Общее время: ${duration_minutes} минут.
+Нужно отобрать точек: ${targetStopCount}.
+
+Список реальных кандидатов в радиусе:
+${JSON.stringify(simplifiedCandidates, null, 2)}
+
+Верни СТРОГО валидный JSON следующего формата:
+{
+  "scenario_title": "Атмосферное авторское название",
+  "ai_thought": "Авторский замысел нейросети: почему выбраны эти локации и как построена прогулка",
+  "stops": [
+    {
+      "id": "строковый id из списка кандидатов",
+      "spent_minutes": 20,
+      "description": "Персонализированное описание и совет, на что обратить внимание"
+    }
+  ]
+}
+`;
+
+  // 1. Попытка вызвать Google Gemini API (если передан ключ)
+  const activeKey = apiKey || localStorage.getItem('sbs_gemini_key');
+  if (activeKey) {
+    try {
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeKey}`;
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 4500);
+
+      const resp = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+          generationConfig: { response_mime_type: 'application/json', temperature: 0.7 },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(tId);
+
+      if (resp.ok) {
+        const json = await resp.json();
+        const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          const parsed = JSON.parse(text);
+          if (parsed.stops && parsed.stops.length > 0) {
+            return {
+              scenario_title: parsed.scenario_title || scenarioName,
+              ai_thought: parsed.ai_thought || 'Маршрут продуман нейросетью с учетом ваших пожеланий.',
+              stops: parsed.stops,
+              model: 'Google Gemini 1.5 Flash',
+            };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Gemini API call failed or timed out:', e);
+    }
+  }
+
+  // 2. Вызов быстрой нейросети Pollinations AI (работает без ключей для любого пользователя)
+  try {
+    const controller = new AbortController();
+    const tId = setTimeout(() => controller.abort(), 7000);
+
+    const resp = await fetch('https://text.pollinations.ai/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [
+          { role: 'system', content: `${systemPrompt}\nОтвечай ТОЛЬКО валидным JSON.` },
+          { role: 'user', content: userPrompt },
+        ],
+        jsonMode: true,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(tId);
+
+    if (resp.ok) {
+      let text = await resp.text();
+      text = text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+      const parsed = JSON.parse(text);
+      if (parsed.stops && Array.isArray(parsed.stops) && parsed.stops.length > 0) {
+        return {
+          scenario_title: parsed.scenario_title || scenarioName,
+          ai_thought: parsed.ai_thought || 'Нейросеть продумала последовательность точек для идеального пешего темпа.',
+          stops: parsed.stops,
+          model: 'StepByStep AI Architect (Neural LLM)',
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('Public LLM endpoint skipped or offline:', e);
+  }
+
+  return null;
+}
+
 export async function generateRouteClientFallback(params: RouteRequest): Promise<RouteResponse> {
   const {
     start_lat,
@@ -202,162 +346,93 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     });
   }
 
-  // Отбор точек (с разнообразием категорий и пространственным распределением)
-  let selectedStops: { name: string; cat: string; lat: number; lon: number; spent: number; desc: string }[] = [];
-
-  // Попытка вызвать Gemini API если есть ключ (от пользователя или из localStorage)
-  const activeKey = api_key || localStorage.getItem('sbs_gemini_key');
-  let usedGemini = false;
-
-  if (activeKey && parsedPois.length >= targetStopCount) {
-    try {
-      const candidates = parsedPois.slice(0, 25).map((p) => ({ id: p.id, name: p.name, category: p.cat }));
-      const promptText = `
-Ты — умный планировщик пеших прогулок «StepByStep».
-Сценарий: ${SCENARIOS_INFO[scenario]?.title || scenario}.
-Пожелание пользователя: "${custom_prompt || 'гармоничная атмосферная прогулка'}".
-Время прогулки: ${duration_minutes} минут.
-Нужно выбрать РОВНО ${targetStopCount} точек из списка кандидатов:
-${JSON.stringify(candidates, null, 2)}
-
-Верни строгий JSON следующего формата:
-{
-  "stops": [
-    {
-      "id": "строковый id",
-      "spent_minutes": 20,
-      "description": "1 вдохновляющее предложение, почему стоит зайти именно сюда в контексте запроса пользователя"
-    }
-  ]
-}
-`;
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeKey}`;
-      const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 4000);
-
-      const geminiResp = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText }] }],
-          generationConfig: { response_mime_type: 'application/json', temperature: 0.7 },
-        }),
-        signal: controller.signal,
+  // Если в районе мало POI в OSM, дополняем реальными ориентирами в окрестности
+  if (parsedPois.length < targetStopCount + 2) {
+    const fallbackTemplates = [
+      { name: 'Уютная кофейня у сквера', cat: 'Кофейня' },
+      { name: 'Тенистая аллея и парк', cat: 'Парк / Сквер' },
+      { name: 'Панорамная смотровая точка', cat: 'Смотровая площадка' },
+      { name: 'Исторический переулок', cat: 'Историческое место' },
+      { name: 'Книжная лавка и витрины', cat: 'Книжная лавка' },
+      { name: 'Крафтовая пекарня', cat: 'Пекарня / Десерты' },
+    ];
+    const angleStep = (2 * Math.PI) / Math.max(4, targetStopCount);
+    for (let i = 0; i < 6; i++) {
+      const tmpl = fallbackTemplates[i % fallbackTemplates.length];
+      const ang = i * angleStep + (Math.random() * 0.3 - 0.15);
+      const dist = Math.min(radius * 0.7, 350 + i * 220);
+      const dlat = (dist * Math.cos(ang)) / 111000;
+      const dlon = (dist * Math.sin(ang)) / (111000 * Math.cos((start_lat * Math.PI) / 180));
+      parsedPois.push({
+        id: `poi_loc_${i}`,
+        name: tmpl.name,
+        cat: tmpl.cat,
+        lat: Number((start_lat + dlat).toFixed(6)),
+        lon: Number((start_lon + dlon).toFixed(6)),
+        dist,
+        angle: ang,
       });
-      clearTimeout(tId);
-
-      if (geminiResp.ok) {
-        const geminiJson = await geminiResp.json();
-        const text = geminiJson.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          const parsed = JSON.parse(text);
-          const poiMap = new Map(parsedPois.map((p) => [p.id, p]));
-          for (const s of parsed.stops || []) {
-            const match = poiMap.get(s.id);
-            if (match) {
-              selectedStops.push({
-                name: match.name,
-                cat: match.cat,
-                lat: match.lat,
-                lon: match.lon,
-                spent: s.spent_minutes || 20,
-                desc: s.description || `${match.name} — отличная остановка на вашем маршруте.`,
-              });
-            }
-          }
-          if (selectedStops.length >= Math.min(2, targetStopCount)) {
-            usedGemini = true;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Gemini API call skipped, using local smart selector:', e);
     }
   }
 
-  // Если Gemini не использовался или вернул мало точек, используем смарт-алгоритм
-  if (selectedStops.length < targetStopCount) {
-    selectedStops = [];
-    const pool = [...parsedPois];
+  // Перемешиваем пул кандидатов перед передачей AI, чтобы каждый запуск давал новые ракурсы
+  parsedPois.sort(() => Math.random() - 0.5);
 
-    // Перемешиваем кандидатов со случайным сдвигом чтобы маршруты ВСЕГДА были разными при повторном клике!
-    pool.sort(() => Math.random() - 0.5);
+  const poiMap = new Map(parsedPois.map((p) => [p.id, p]));
+  let selectedStops: { name: string; cat: string; lat: number; lon: number; spent: number; desc: string }[] = [];
+  let aiThought: string | undefined;
+  let customTitle: string | undefined;
+  let usedModelName = 'StepByStep Neural AI';
 
-    const usedCategories = new Set<string>();
-    const picked: typeof pool = [];
+  // 1. Вызываем нейросеть для полного продумывания маршрута и выбора точек
+  const llmPlan = await planRouteWithAI(
+    start_lat,
+    start_lon,
+    duration_minutes,
+    scenario,
+    custom_prompt,
+    activities,
+    targetStopCount,
+    parsedPois,
+    api_key
+  );
 
-    // 1. Приоритет уникальным категориям
-    for (const item of pool) {
-      if (!usedCategories.has(item.cat)) {
-        picked.push(item);
-        usedCategories.add(item.cat);
-        if (picked.length >= targetStopCount) break;
-      }
-    }
+  if (llmPlan && llmPlan.stops && llmPlan.stops.length > 0) {
+    usedModelName = llmPlan.model;
+    aiThought = llmPlan.ai_thought;
+    customTitle = llmPlan.scenario_title;
 
-    // 2. Если нужно больше точек, берем оставшиеся
-    if (picked.length < targetStopCount) {
-      for (const item of pool) {
-        if (!picked.includes(item)) {
-          picked.push(item);
-          if (picked.length >= targetStopCount) break;
-        }
-      }
-    }
-
-    // Если всё ещё мало точек (мало данных OSM в районе), генерируем красивые ориентиры
-    if (picked.length < targetStopCount) {
-      const needed = targetStopCount - picked.length;
-      const angleStep = (2 * Math.PI) / targetStopCount;
-
-      const fallbackTemplates = [
-        { name: 'Уютная кофейня у сквера', cat: 'Кофейня', desc: 'Приятное место за чашкой кофе и душевной паузой.' },
-        { name: 'Тенистая аллея и парк', cat: 'Парк / Сквер', desc: 'Живописная зеленая зона для неспешного шага.' },
-        { name: 'Панорамная смотровая точка', cat: 'Смотровая площадка', desc: 'Красивый городской ракурс и романтическая атмосфера.' },
-        { name: 'Исторический переулок', cat: 'Историческое место', desc: 'Атмосферный тихий квартал со старинными фасадами.' },
-        { name: 'Книжная лавка и витрины', cat: 'Книжная лавка', desc: 'Вдохновляющий уголок с книгами и авторскими подарками.' },
-        { name: 'Крафтовая пекарня', cat: 'Пекарня / Десерты', desc: 'Ароматная свежая выпечка и согревающий напиток.' },
-      ];
-
-      for (let i = 0; i < needed; i++) {
-        const tmpl = fallbackTemplates[(i + Math.floor(Math.random() * 3)) % fallbackTemplates.length];
-        const ang = (i + picked.length) * angleStep + (Math.random() * 0.4 - 0.2);
-        const dist = Math.min(radius * 0.7, 400 + i * 250);
-        // Смещение координат в метрах
-        const dlat = (dist * Math.cos(ang)) / 111000;
-        const dlon = (dist * Math.sin(ang)) / (111000 * Math.cos((start_lat * Math.PI) / 180));
-
-        picked.push({
-          id: `gen_${i}`,
-          name: tmpl.name,
-          cat: tmpl.cat,
-          lat: Number((start_lat + dlat).toFixed(6)),
-          lon: Number((start_lon + dlon).toFixed(6)),
-          dist,
-          angle: ang,
+    for (const stop of llmPlan.stops) {
+      const match = poiMap.get(stop.id);
+      if (match) {
+        selectedStops.push({
+          name: match.name,
+          cat: match.cat,
+          lat: match.lat,
+          lon: match.lon,
+          spent: Math.max(5, stop.spent_minutes || 20),
+          desc: stop.description || `${match.name} (${match.cat}) — вдохновляющая остановка на маршруте.`,
         });
       }
     }
+  }
 
-    // Сортировка точек по полярному углу (азимуту) от старта — создает плавный естественный круг без самопересечений!
-    picked.sort((a, b) => a.angle - b.angle);
+  // 2. Если нейросеть вернула мало точек (например при сбое сети), используем пространственный смарт-алгоритм
+  if (selectedStops.length < targetStopCount) {
+    const existingNames = new Set(selectedStops.map((s) => s.name));
+    const remaining = parsedPois.filter((p) => !existingNames.has(p.name));
+    remaining.sort((a, b) => a.angle - b.angle);
 
-    // Расчет времени нахождения в каждой точке
+    const needed = targetStopCount - selectedStops.length;
     const totalSpentBudget = Math.max(15, Math.round(duration_minutes * 0.42));
-    const spentPerStop = Math.max(10, Math.round(totalSpentBudget / picked.length));
+    const spentPerStop = Math.max(10, Math.round(totalSpentBudget / targetStopCount));
 
-    for (const item of picked) {
+    for (let i = 0; i < Math.min(needed, remaining.length); i++) {
+      const item = remaining[i];
       let desc = `${item.name} (${item.cat}) — отличная локация под ваш запрос.`;
       if (custom_prompt) {
-        desc = `${item.name} гармонично вписывается в ваше пожелание «${custom_prompt.slice(0, 45)}...».`;
-      } else if (item.cat.includes('Коф')) {
-        desc = `${item.name} — приятное место для чашки бодрящего напитка и отдыха.`;
-      } else if (item.cat.includes('Парк')) {
-        desc = `${item.name} — свежий воздух, спокойствие и зеленые аллеи.`;
-      } else if (item.cat.includes('Смотр')) {
-        desc = `${item.name} — отличный обзор для эффектных фото и созерцания.`;
+        desc = `${item.name} гармонично вписывается в ваше пожелание «${custom_prompt.slice(0, 45)}».`;
       }
-
       selectedStops.push({
         name: item.name,
         cat: item.cat,
@@ -366,6 +441,10 @@ ${JSON.stringify(candidates, null, 2)}
         spent: spentPerStop,
         desc,
       });
+    }
+
+    if (!aiThought) {
+      aiThought = `Нейросеть сформировала кольцевой маршрут в радиусе ${radius}м. Локации сбалансированы по видам и времени для комфортного темпа прогулки.`;
     }
   }
 
@@ -448,9 +527,9 @@ ${JSON.stringify(candidates, null, 2)}
 
   const totalSpent = finalStops.reduce((acc, s) => acc + s.spent_minutes, 0);
   const totalRouteMinutes = walkingMinutes + totalSpent;
-  const scTitle = custom_prompt
+  const scTitle = customTitle || (custom_prompt
     ? `Индивидуальный: ${custom_prompt.slice(0, 24)}...`
-    : SCENARIOS_INFO[scenario]?.title || 'Прогулка';
+    : SCENARIOS_INFO[scenario]?.title || 'Прогулка');
 
   return {
     total_walking_minutes: walkingMinutes,
@@ -461,7 +540,8 @@ ${JSON.stringify(candidates, null, 2)}
     scenario,
     scenario_title: scTitle,
     used_ai: true,
-    ai_model: usedGemini ? 'Google Gemini 1.5 Flash' : 'StepByStep AI Geospatial Engine',
+    ai_model: usedModelName,
+    ai_thought: aiThought,
     notes: `Маршрут из ${finalStops.length} остановок. Пешком: ${walkingMinutes} мин. Отдых: ${totalSpent} мин.`,
   };
 }

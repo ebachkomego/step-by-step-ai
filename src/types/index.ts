@@ -39,6 +39,7 @@ export interface RouteResponse {
   scenario_title: string;
   used_ai: boolean;
   ai_model?: string;
+  ai_thought?: string;
   notes?: string;
 }
 
