@@ -29,17 +29,15 @@ const SCENARIOS_INFO: Record<string, { title: string; defaultActivities: string[
   },
 };
 
-// Функция определения количества остановок по времени
+// Функция определения комфортного количества остановок (фокус на отдых и беседы, а не беготню)
 export function calculateStopCount(durationMinutes: number, manualStopCount?: number): number {
   if (manualStopCount && manualStopCount > 0) {
-    return Math.min(8, Math.max(1, manualStopCount));
+    return Math.min(5, Math.max(1, manualStopCount));
   }
   if (durationMinutes <= 30) return 1;
-  if (durationMinutes <= 45) return 2;
-  if (durationMinutes <= 60) return 3;
-  if (durationMinutes <= 90) return 4;
-  if (durationMinutes <= 120) return 5;
-  return 6;
+  if (durationMinutes <= 50) return 2;
+  if (durationMinutes <= 120) return 3; // 2 часа = 3 уютные остановки с комфортным временем посидеть
+  return 4; // 3 часа = 4 атмосферные остановки
 }
 
 // Извлечение ключевых тегов OSM из текста пользователя
@@ -127,7 +125,7 @@ interface LLMRouteResult {
   model: string;
 }
 
-// Интеллектуальный нейросетевой планировщик маршрутов (Gemini + Public Neural LLM)
+// Интеллектуальный нейросетевой планировщик прогулок (Google Gemini 2.0/2.5 Flash + Neural Reasoning LLM)
 async function planRouteWithAI(
   start_lat: number,
   start_lon: number,
@@ -139,7 +137,7 @@ async function planRouteWithAI(
   candidates: { id: string; name: string; cat: string; lat: number; lon: number; dist: number }[],
   apiKey?: string
 ): Promise<LLMRouteResult | null> {
-  const simplifiedCandidates = candidates.slice(0, 30).map((c) => ({
+  const simplifiedCandidates = candidates.slice(0, 25).map((c) => ({
     id: c.id,
     name: c.name,
     category: c.cat,
@@ -147,84 +145,99 @@ async function planRouteWithAI(
   }));
 
   const scenarioName = SCENARIOS_INFO[scenario]?.title || scenario;
-  const activitiesStr = activities.length > 0 ? activities.join(', ') : 'атмосферная прогулка';
+  const activitiesStr = activities.length > 0 ? activities.join(', ') : 'уютная прогулка, отдых, разговоры';
 
-  const systemPrompt = `Ты — ведущий AI-урбанист и архитектор пеших прогулок «StepByStep AI». Твоя задача — не просто написать текст, а полностью ПРОДУМАТЬ МАРШРУТ, отобрать точки на карте и выстроить логику движения:
-1. Выбрать РОВНО ${targetStopCount} лучших мест из переданного списка кандидатов под запрос пользователя.
-2. Выстроить их в логичную последовательность посещения: движение должно быть гармоничным, без кружения туда-обратно.
-3. Рассчитать время нахождения в каждой точке (spent_minutes), учитывая общее время прогулки ${duration_minutes} мин (остальное время уйдет на пеший шаг).
-4. Сформулировать 'ai_thought' (2-3 предложения): твой авторский замысел прогулки, почему выбраны именно эти места и какая драматургия у маршрута.
-5. Придумать авторское название прогулки 'scenario_title'.
-6. Для каждой точки написать живое индивидуальное описание 'description', почему именно сюда стоит зайти.`;
+  // Расчет баланса времени: 30-35% на неспешный шаг, 65-70% на посидеть и отдохнуть!
+  const walkingBudgetMin = Math.min(45, Math.max(12, Math.round(duration_minutes * 0.32)));
+  const spentBudgetMin = duration_minutes - walkingBudgetMin;
+  const avgSpentPerStop = Math.round(spentBudgetMin / targetStopCount);
+
+  const systemPrompt = `Ты — ведущий AI-урбанист и архитектор пеших прогулок «StepByStep AI».
+Твоя задача — спланировать уютную, комфортную прогулку для отдыха, общения и приятного времени, а НЕ спортивный марш-бросок!
+
+ГЛАВНЫЕ ПРИНЦИПЫ:
+1. Пользователь гуляет, чтобы ПОСИДЕТЬ, ВЫПИТЬ ЧАШКУ КОФЕ, ПОГОВОРИТЬ, ОТДОХНУТЬ на лавочке в парке, а не бегать марафон.
+2. Общее время: ${duration_minutes} минут.
+   - На неспешный шаг между точками выделено ВСЕГО ~${walkingBudgetMin} минут суммарно (дистанция до 2.0-2.5 км). Категорически ЗАПРЕЩЕНО уводить пользователя за пределы города, в промзоны или делать бессмысленные пустые крюки!
+   - На спокойный отдых в точках выделено ~${spentBudgetMin} минут (примерно по ${avgSpentPerStop} мин на каждую остановку).
+3. Выбери РОВНО ${targetStopCount} лучших уютных мест из списка кандидатов.
+4. Выстрой их в естественный, связный порядок посещения в пределах одного района без метаний туда-обратно.
+5. Назначь реалистичное время нахождения (spent_minutes) в каждой точке (например: 30-45 мин в кофейне/ресторане за столиком, 20-35 мин на скамейке в парке/у воды, 15-20 мин на смотровой площадке или в книжном). Сумма spent_minutes должна быть около ${spentBudgetMin} мин.
+6. В 'ai_thought' (2-3 предложения) опиши свой авторский замысел: почему именно эти места идеальны для неспешного отдыха, бесед и релакса.
+7. В 'scenario_title' придумай красивое вдохновляющее название прогулки.
+8. В 'description' напиши душевную причину зайти сюда (где уютнее сесть, что попробовать, чем полюбоваться).`;
 
   const userPrompt = `
 Локация старта: ${start_lat.toFixed(4)}, ${start_lon.toFixed(4)}.
 Сценарий: ${scenarioName}.
-Пожелание пользователя: "${custom_prompt || 'красивая и гармоничная прогулка'}".
+Пожелание пользователя: "${custom_prompt || 'уютная неспешная прогулка, чтобы посидеть, поговорить и отдохнуть'}".
 Выбранные активности: ${activitiesStr}.
-Общее время: ${duration_minutes} минут.
-Нужно отобрать точек: ${targetStopCount}.
+Общее время: ${duration_minutes} минут (из них отдых в точках ~${spentBudgetMin} мин, неспешный шаг ~${walkingBudgetMin} мин).
+Количество остановок: ${targetStopCount}.
 
-Список реальных кандидатов в радиусе:
+Список реальных кандидатов в радиусе района:
 ${JSON.stringify(simplifiedCandidates, null, 2)}
 
 Верни СТРОГО валидный JSON следующего формата:
 {
   "scenario_title": "Атмосферное авторское название",
-  "ai_thought": "Авторский замысел нейросети: почему выбраны эти локации и как построена прогулка",
+  "ai_thought": "Авторский замысел нейросети: почему выбраны эти локации для неспешного отдыха и приятных бесед",
   "stops": [
     {
       "id": "строковый id из списка кандидатов",
-      "spent_minutes": 20,
-      "description": "Персонализированное описание и совет, на что обратить внимание"
+      "spent_minutes": ${avgSpentPerStop},
+      "description": "Персонализированный совет, где присесть и на что обратить внимание"
     }
   ]
 }
 `;
 
-  // 1. Попытка вызвать Google Gemini API (если передан ключ)
+  // 1. Попытка вызвать Google Gemini API с новейшими быстрыми моделями (gemini-2.0-flash / gemini-2.5-flash)
   const activeKey = apiKey || localStorage.getItem('sbs_gemini_key');
   if (activeKey) {
-    try {
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeKey}`;
-      const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 4500);
+    const geminiModels = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+    for (const model of geminiModels) {
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`;
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 4500);
 
-      const resp = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-          generationConfig: { response_mime_type: 'application/json', temperature: 0.7 },
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(tId);
+        const resp = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+            generationConfig: { response_mime_type: 'application/json', temperature: 0.7 },
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(tId);
 
-      if (resp.ok) {
-        const json = await resp.json();
-        const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          const parsed = JSON.parse(text);
-          if (parsed.stops && parsed.stops.length > 0) {
-            return {
-              scenario_title: parsed.scenario_title || scenarioName,
-              ai_thought: parsed.ai_thought || 'Маршрут продуман нейросетью с учетом ваших пожеланий.',
-              stops: parsed.stops,
-              model: 'Google Gemini 1.5 Flash',
-            };
+        if (resp.ok) {
+          const json = await resp.json();
+          const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            const parsed = JSON.parse(text);
+            if (parsed.stops && parsed.stops.length > 0) {
+              return {
+                scenario_title: parsed.scenario_title || scenarioName,
+                ai_thought: parsed.ai_thought || 'Маршрут составлен с акцентом на отдых и душевные разговоры.',
+                stops: parsed.stops,
+                model: `Google ${model}`,
+              };
+            }
           }
         }
+      } catch (e) {
+        console.warn(`Gemini (${model}) call skipped:`, e);
       }
-    } catch (e) {
-      console.warn('Gemini API call failed or timed out:', e);
     }
   }
 
-  // 2. Вызов быстрой нейросети Pollinations AI (работает без ключей для любого пользователя)
+  // 2. Вызов быстрой современной reasoning-нейросети Pollinations AI (работает прямо из коробки)
   try {
     const controller = new AbortController();
-    const tId = setTimeout(() => controller.abort(), 7000);
+    const tId = setTimeout(() => controller.abort(), 7500);
 
     const resp = await fetch('https://text.pollinations.ai/', {
       method: 'POST',
@@ -247,9 +260,9 @@ ${JSON.stringify(simplifiedCandidates, null, 2)}
       if (parsed.stops && Array.isArray(parsed.stops) && parsed.stops.length > 0) {
         return {
           scenario_title: parsed.scenario_title || scenarioName,
-          ai_thought: parsed.ai_thought || 'Нейросеть продумала последовательность точек для идеального пешего темпа.',
+          ai_thought: parsed.ai_thought || 'Нейросеть подобрала уютные локации, чтобы посидеть, отдохнуть и пообщаться в спокойном темпе.',
           stops: parsed.stops,
-          model: 'StepByStep AI Architect (Neural LLM)',
+          model: 'StepByStep Neural AI (Reasoning Engine)',
         };
       }
     }
@@ -273,8 +286,8 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     api_key,
   } = params;
 
-  // Динамический радиус поиска от 600 до 3500 метров
-  const radius = Math.min(3500, Math.max(600, Math.round(duration_minutes * 17)));
+  // Динамический комфортный радиус района: СТРОГО от 450 до 1100 метров, чтобы никогда не уходить за город!
+  const radius = Math.min(1100, Math.max(450, Math.round(350 + Math.sqrt(duration_minutes) * 65)));
   const targetStopCount = calculateStopCount(duration_minutes, stop_count);
 
   // Формируем динамический Overpass QL
@@ -331,8 +344,8 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     if (!lat || !lon) continue;
 
     const dist = getDistance(start_lat, start_lon, lat, lon);
-    // Исключаем точки в радиусе ближе 60 метров от старта
-    if (dist < 60) continue;
+    // Исключаем точки в радиусе ближе 40 метров от старта
+    if (dist < 40) continue;
 
     const angle = Math.atan2(lon - start_lon, lat - start_lat);
     parsedPois.push({
@@ -346,21 +359,21 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     });
   }
 
-  // Если в районе мало POI в OSM, дополняем реальными ориентирами в окрестности
+  // Если в районе мало POI в OSM, дополняем реальными уютными ориентирами в шаговой доступности
   if (parsedPois.length < targetStopCount + 2) {
     const fallbackTemplates = [
-      { name: 'Уютная кофейня у сквера', cat: 'Кофейня' },
-      { name: 'Тенистая аллея и парк', cat: 'Парк / Сквер' },
-      { name: 'Панорамная смотровая точка', cat: 'Смотровая площадка' },
-      { name: 'Исторический переулок', cat: 'Историческое место' },
-      { name: 'Книжная лавка и витрины', cat: 'Книжная лавка' },
-      { name: 'Крафтовая пекарня', cat: 'Пекарня / Десерты' },
+      { name: 'Уютная кофейня с диванчиками', cat: 'Кофейня' },
+      { name: 'Тенистая аллея и скамейки в сквере', cat: 'Парк / Сквер' },
+      { name: 'Видовая смотровая терраса', cat: 'Смотровая площадка' },
+      { name: 'Тихий исторический дворик', cat: 'Историческое место' },
+      { name: 'Атмосферная книжная лавка', cat: 'Книжная лавка' },
+      { name: 'Пекарня со свежей выпечкой', cat: 'Пекарня / Десерты' },
     ];
-    const angleStep = (2 * Math.PI) / Math.max(4, targetStopCount);
-    for (let i = 0; i < 6; i++) {
+    const angleStep = (2 * Math.PI) / Math.max(3, targetStopCount);
+    for (let i = 0; i < 5; i++) {
       const tmpl = fallbackTemplates[i % fallbackTemplates.length];
       const ang = i * angleStep + (Math.random() * 0.3 - 0.15);
-      const dist = Math.min(radius * 0.7, 350 + i * 220);
+      const dist = Math.min(radius * 0.65, 300 + i * 180);
       const dlat = (dist * Math.cos(ang)) / 111000;
       const dlon = (dist * Math.sin(ang)) / (111000 * Math.cos((start_lat * Math.PI) / 180));
       parsedPois.push({
@@ -375,16 +388,16 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     }
   }
 
-  // Перемешиваем пул кандидатов перед передачей AI, чтобы каждый запуск давал новые ракурсы
+  // Перемешиваем пул кандидатов перед передачей AI
   parsedPois.sort(() => Math.random() - 0.5);
 
   const poiMap = new Map(parsedPois.map((p) => [p.id, p]));
   let selectedStops: { name: string; cat: string; lat: number; lon: number; spent: number; desc: string }[] = [];
   let aiThought: string | undefined;
   let customTitle: string | undefined;
-  let usedModelName = 'StepByStep Neural AI';
+  let usedModelName = 'StepByStep AI Architect';
 
-  // 1. Вызываем нейросеть для полного продумывания маршрута и выбора точек
+  // 1. Вызываем нейросеть для продумывания маршрута и комфортных остановок
   const llmPlan = await planRouteWithAI(
     start_lat,
     start_lon,
@@ -396,6 +409,11 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     parsedPois,
     api_key
   );
+
+  // Расчет комфортного бюджета: ~30-35% на неспешный шаг, остальное — на отдых и беседы
+  const walkingBudgetMin = Math.min(45, Math.max(12, Math.round(duration_minutes * 0.32)));
+  const spentBudgetMin = duration_minutes - walkingBudgetMin;
+  const defaultSpentPerStop = Math.max(15, Math.round(spentBudgetMin / targetStopCount));
 
   if (llmPlan && llmPlan.stops && llmPlan.stops.length > 0) {
     usedModelName = llmPlan.model;
@@ -410,41 +428,38 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
           cat: match.cat,
           lat: match.lat,
           lon: match.lon,
-          spent: Math.max(5, stop.spent_minutes || 20),
-          desc: stop.description || `${match.name} (${match.cat}) — вдохновляющая остановка на маршруте.`,
+          spent: Math.max(15, stop.spent_minutes || defaultSpentPerStop),
+          desc: stop.description || `${match.name} (${match.cat}) — прекрасное место, чтобы неспешно провести время.`,
         });
       }
     }
   }
 
-  // 2. Если нейросеть вернула мало точек (например при сбое сети), используем пространственный смарт-алгоритм
+  // 2. Если нейросеть вернула меньше точек (например при сбое сети), дополняем с комфортным таймингом
   if (selectedStops.length < targetStopCount) {
     const existingNames = new Set(selectedStops.map((s) => s.name));
     const remaining = parsedPois.filter((p) => !existingNames.has(p.name));
     remaining.sort((a, b) => a.angle - b.angle);
 
     const needed = targetStopCount - selectedStops.length;
-    const totalSpentBudget = Math.max(15, Math.round(duration_minutes * 0.42));
-    const spentPerStop = Math.max(10, Math.round(totalSpentBudget / targetStopCount));
-
     for (let i = 0; i < Math.min(needed, remaining.length); i++) {
       const item = remaining[i];
-      let desc = `${item.name} (${item.cat}) — отличная локация под ваш запрос.`;
+      let desc = `${item.name} (${item.cat}) — уютное место для паузы и приятного разговора.`;
       if (custom_prompt) {
-        desc = `${item.name} гармонично вписывается в ваше пожелание «${custom_prompt.slice(0, 45)}».`;
+        desc = `${item.name} отлично подходит под ваше пожелание «${custom_prompt.slice(0, 40)}».`;
       }
       selectedStops.push({
         name: item.name,
         cat: item.cat,
         lat: item.lat,
         lon: item.lon,
-        spent: spentPerStop,
+        spent: defaultSpentPerStop,
         desc,
       });
     }
 
     if (!aiThought) {
-      aiThought = `Нейросеть сформировала кольцевой маршрут в радиусе ${radius}м. Локации сбалансированы по видам и времени для комфортного темпа прогулки.`;
+      aiThought = `Уютный маршрут спланирован в пределах ${radius}м. Выделено достаточно времени (${spentBudgetMin} мин.), чтобы не спеша посидеть в кофейне, отдохнуть в сквере и пообщаться.`;
     }
   }
 
@@ -470,8 +485,9 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
 
   const coordsStr = coords.map((c) => `${c[0].toFixed(6)},${c[1].toFixed(6)}`).join(';');
   let geojson: any = null;
-  let distanceMeters = Math.round(duration_minutes * 65);
-  let walkingMinutes = Math.max(1, Math.round(duration_minutes * 0.58));
+  // По умолчанию: комфортная дистанция 1.2 - 2.5 км
+  let distanceMeters = Math.min(2800, Math.round(walkingBudgetMin * 60));
+  let walkingMinutes = walkingBudgetMin;
 
   try {
     const osrmUrl = `https://routing.openstreetmap.de/routed-foot/route/v1/foot/${coordsStr}?overview=full&geometries=geojson`;
@@ -509,8 +525,8 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
         let ilon = lon1 + (lon2 - lon1) * t;
         let ilat = lat1 + (lat2 - lat1) * t;
         if (step > 0 && step < subSteps) {
-          ilon += ((step % 2) * 2 - 1) * 0.0003;
-          ilat += (((step + 1) % 2) * 2 - 1) * 0.0002;
+          ilon += ((step % 2) * 2 - 1) * 0.0002;
+          ilat += (((step + 1) % 2) * 2 - 1) * 0.00015;
         }
         interpolated.push([ilon, ilat]);
       }
@@ -542,6 +558,6 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     used_ai: true,
     ai_model: usedModelName,
     ai_thought: aiThought,
-    notes: `Маршрут из ${finalStops.length} остановок. Пешком: ${walkingMinutes} мин. Отдых: ${totalSpent} мин.`,
+    notes: `Маршрут из ${finalStops.length} остановок. Шаг: ${walkingMinutes} мин (${(distanceMeters / 1000).toFixed(1)} км). Отдых и беседы: ${totalSpent} мин.`,
   };
 }

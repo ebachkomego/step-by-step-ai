@@ -16,7 +16,8 @@ import {
   ChevronDown,
   ChevronUp,
   Sliders,
-  Send
+  Send,
+  Key
 } from 'lucide-react';
 import { calculateStopCount } from '../services/clientRouteEngine';
 
@@ -91,6 +92,10 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   const [selectedActivities, setSelectedActivities] = useState<string[]>(['coffee', 'nature']);
   const [manualStopCount, setManualStopCount] = useState<number>(0); // 0 = авто
 
+  // Личный API-ключ Gemini (сохраняется в localStorage)
+  const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('sbs_gemini_key') || '');
+  const [showKeyField, setShowKeyField] = useState<boolean>(false);
+
   const toggleActivity = (id: string) => {
     setSelectedActivities((prev) =>
       prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
@@ -107,6 +112,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
       custom_prompt: customPrompt.trim() || undefined,
       activities: selectedActivities,
       stop_count: manualStopCount > 0 ? manualStopCount : undefined,
+      api_key: apiKey.trim() || undefined,
     });
     // При построении разворачиваем шторку в стандартный или расширенный вид
     setSheetState('normal');
@@ -257,6 +263,56 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                       {idea}
                     </button>
                   ))}
+                </div>
+
+                {/* Подключение / статус личного Gemini API ключа */}
+                <div className="pt-1 border-t border-amber-200/40 dark:border-neutral-700/60">
+                  <button
+                    type="button"
+                    onClick={() => setShowKeyField(!showKeyField)}
+                    className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-600 dark:text-neutral-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors cursor-pointer"
+                  >
+                    <Key className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{apiKey ? '✓ Личный ключ Gemini подключен' : 'Подключить личный Google Gemini API ключ'}</span>
+                  </button>
+
+                  {showKeyField && (
+                    <div className="mt-2 p-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-amber-300/70 dark:border-neutral-700 space-y-1.5 animate-in fade-in">
+                      <div className="flex items-center justify-between text-[10px] text-neutral-500">
+                        <span>Google Gemini API Key:</span>
+                        {apiKey && <span className="text-emerald-500 font-bold">Активен (Google 2.0/2.5 Flash)</span>}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="password"
+                          value={apiKey}
+                          onChange={(e) => {
+                            const val = e.target.value.trim();
+                            setApiKey(val);
+                            if (val) localStorage.setItem('sbs_gemini_key', val);
+                            else localStorage.removeItem('sbs_gemini_key');
+                          }}
+                          placeholder="Вставьте AIzaSy..."
+                          className="flex-1 text-xs px-2.5 py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 font-mono text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+                        />
+                        {apiKey && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setApiKey('');
+                              localStorage.removeItem('sbs_gemini_key');
+                            }}
+                            className="text-[10px] px-2 py-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer font-medium"
+                          >
+                            Сбросить
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-neutral-400 leading-tight">
+                        Ключ сохраняется в вашем браузере. Если ключ не указан, автоматически работает встроенная быстрая нейросеть.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -460,13 +516,18 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                     {routeData.total_route_minutes % 60 ? `${routeData.total_route_minutes % 60} мин` : ''}
                   </h3>
 
-                  <div className="flex items-center gap-3 text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                    <span className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 mt-1.5">
+                    <span className="flex items-center gap-1 font-medium bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-lg">
                       <Footprints className="w-3.5 h-3.5 text-neutral-400" />
-                      {(routeData.total_distance_meters / 1000).toFixed(1)} км пешком ({routeData.total_walking_minutes} мин.)
+                      {(routeData.total_distance_meters / 1000).toFixed(1)} км шагом ({routeData.total_walking_minutes} мин.)
                     </span>
-                    <span>•</span>
-                    <span>{routeData.stops.length} остановок</span>
+                    <span className="flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-lg border border-amber-200/50 dark:border-amber-900/50">
+                      <Coffee className="w-3.5 h-3.5 text-amber-500" />
+                      {Math.max(0, routeData.total_route_minutes - routeData.total_walking_minutes)} мин. отдых и беседы
+                    </span>
+                    <span className="text-[11px] text-neutral-400">
+                      • {routeData.stops.length} остановок
+                    </span>
                   </div>
                 </div>
 
