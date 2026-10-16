@@ -60,11 +60,13 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (isDark) {
       document.documentElement.classList.add('dark');
+      document.body.classList.add('dark');
       localStorage.setItem('sbs_theme', 'dark');
       localStorage.setItem('theme', 'dark');
       document.getElementById('theme-color-meta')?.setAttribute('content', '#121212');
     } else {
       document.documentElement.classList.remove('dark');
+      document.body.classList.remove('dark');
       localStorage.setItem('sbs_theme', 'light');
       localStorage.setItem('theme', 'light');
       document.getElementById('theme-color-meta')?.setAttribute('content', '#ffffff');

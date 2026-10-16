@@ -41,12 +41,12 @@ const SCENARIOS = [
 ];
 
 const TIME_CHIPS = [
-  { label: '30 мин', value: 30 },
-  { label: '45 мин', value: 45 },
-  { label: '1 час', value: 60 },
-  { label: '1.5 ч', value: 90 },
-  { label: '2 часа', value: 120 },
-  { label: '3 часа', value: 180 },
+  { label: '30 мин', value: 30, short: '30м' },
+  { label: '45 мин', value: 45, short: '45м' },
+  { label: '1 час', value: 60, short: '1ч' },
+  { label: '1.5 ч', value: 90, short: '1.5ч' },
+  { label: '2 часа', value: 120, short: '2ч' },
+  { label: '3 часа', value: 180, short: '3ч' },
 ];
 
 const ACTIVITIES = [
@@ -95,6 +95,23 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   const [selectedActivities, setSelectedActivities] = useState<string[]>(['coffee', 'nature']);
   const [manualStopCount, setManualStopCount] = useState<number>(0); // 0 = авто
   const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
+
+  // Реф и хэндлер для интерактивного ползунка времени
+  const sliderContainerRef = useRef<HTMLDivElement>(null);
+
+  const activeChipIndex = Math.max(
+    0,
+    TIME_CHIPS.findIndex((c) => c.value === duration)
+  );
+
+  const handleSliderPointer = (clientX: number) => {
+    if (!sliderContainerRef.current) return;
+    const rect = sliderContainerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const fraction = Math.max(0, Math.min(0.999, x / rect.width));
+    const idx = Math.min(TIME_CHIPS.length - 1, Math.floor(fraction * TIME_CHIPS.length));
+    setDuration(TIME_CHIPS[idx].value);
+  };
 
   // Отслеживание свайпов / перетаскивания островка
   const touchStartY = useRef<number | null>(null);
@@ -200,25 +217,11 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
           {!routeData ? (
             /* ================= ЭКРАН НАСТРОЙКИ МАРШРУТА ================= */
             <>
-              {/* Шапка: Заголовок + Геолокация */}
+              {/* Шапка: Чистый заголовок + кнопки */}
               <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-black tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
-                    <span>Куда пойдем?</span>
-                    <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-300">
-                      Яндекс Карты
-                    </span>
-                  </h2>
-                  <div className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-                    <span className={`w-2.5 h-2.5 rounded-full ${isTrackingUser ? 'bg-emerald-500 animate-pulse' : 'bg-blue-500'}`} />
-                    <span className="font-mono">
-                      {startLat.toFixed(4)}, {startLon.toFixed(4)}
-                    </span>
-                    <span>
-                      {isTrackingUser ? '• GPS активен' : '• выбран старт'}
-                    </span>
-                  </div>
-                </div>
+                <h2 className="text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
+                  Куда пойдём?
+                </h2>
 
                 <div className="flex items-center gap-2">
                   {onOpenHistory && (
@@ -356,18 +359,18 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
 
               {/* 4. Время прогулки */}
               <div>
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-2.5">
                   <span className="text-sm font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
                     <Clock className="w-4 h-4 text-neutral-400" />
                     Время прогулки
                   </span>
                   <span className="text-sm font-extrabold text-neutral-900 dark:text-white bg-amber-100 dark:bg-neutral-800 px-3 py-1 rounded-xl">
-                    {duration} минут ({Math.floor(duration / 60)}ч {duration % 60 ? `${duration % 60}м` : ''})
+                    {duration} минут ({Math.floor(duration / 60) > 0 ? `${Math.floor(duration / 60)}ч ` : ''}{duration % 60 ? `${duration % 60}м` : ''})
                   </span>
                 </div>
 
-                {/* Чипсы времени */}
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                {/* 1. Кнопки времени ровно в 6 колонок */}
+                <div className="grid grid-cols-6 gap-1.5 sm:gap-2">
                   {TIME_CHIPS.map((chip) => (
                     <button
                       key={chip.value}
@@ -375,8 +378,8 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                       onClick={() => setDuration(chip.value)}
                       className={`py-2 px-1 text-center rounded-xl text-xs md:text-sm font-bold transition-all cursor-pointer ${
                         duration === chip.value
-                          ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 shadow-sm'
-                          : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200'
+                          ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 shadow-md ring-2 ring-amber-400'
+                          : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
                       }`}
                     >
                       {chip.label}
@@ -384,16 +387,75 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   ))}
                 </div>
 
-                {/* Ползунок времени */}
-                <input
-                  type="range"
-                  min="20"
-                  max="180"
-                  step="5"
-                  value={duration}
-                  onChange={(e) => setDuration(Number(e.target.value))}
-                  className="w-full mt-3 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-[#FFCC00]"
-                />
+                {/* 2. Ползунок времени с рисками, ровно спозиционированный под кнопками выбора */}
+                <div
+                  ref={sliderContainerRef}
+                  className="relative mt-3 pt-1 pb-1 select-none cursor-pointer"
+                  onPointerDown={(e) => {
+                    handleSliderPointer(e.clientX);
+                    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                  }}
+                  onPointerMove={(e) => {
+                    if (e.buttons === 1) {
+                      handleSliderPointer(e.clientX);
+                    }
+                  }}
+                >
+                  {/* Горизонтальный фоновый трек между центрами первой и последней колонки */}
+                  <div className="absolute top-[16px] left-[8.33%] right-[8.33%] h-1 bg-neutral-200 dark:bg-neutral-700 rounded-full" />
+
+                  {/* Активная подсвеченная часть трека */}
+                  <div
+                    className="absolute top-[16px] left-[8.33%] h-1 bg-amber-400 rounded-full transition-all duration-150"
+                    style={{
+                      width: `${(activeChipIndex / 5) * (100 - 16.66)}%`
+                    }}
+                  />
+
+                  {/* Сетка рисок в точности по 6 колонкам */}
+                  <div className="grid grid-cols-6 gap-1.5 sm:gap-2 relative z-10">
+                    {TIME_CHIPS.map((chip, idx) => {
+                      const isActive = duration === chip.value;
+                      const isPassed = activeChipIndex >= idx;
+
+                      return (
+                        <div
+                          key={chip.value}
+                          onClick={() => setDuration(chip.value)}
+                          className="flex flex-col items-center justify-center group py-0.5"
+                        >
+                          {/* Риска / Ползунок */}
+                          <div className="h-6 flex items-center justify-center">
+                            {isActive ? (
+                              <div className="w-5 h-5 rounded-full bg-amber-400 shadow-md ring-4 ring-amber-400/25 flex items-center justify-center transition-transform scale-110">
+                                <div className="w-2 h-2 rounded-full bg-neutral-900" />
+                              </div>
+                            ) : (
+                              <div
+                                className={`w-1 rounded-full transition-all ${
+                                  isPassed
+                                    ? 'bg-amber-400 h-3.5'
+                                    : 'bg-neutral-300 dark:bg-neutral-600 h-2.5 group-hover:h-3.5 group-hover:bg-neutral-400'
+                                }`}
+                              />
+                            )}
+                          </div>
+
+                          {/* Подпись риска по минутам */}
+                          <span
+                            className={`text-[11px] font-bold mt-1 transition-colors ${
+                              isActive
+                                ? 'text-amber-500 dark:text-amber-400 font-black'
+                                : 'text-neutral-400 dark:text-neutral-500'
+                            }`}
+                          >
+                            {chip.short}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               {/* 5. Дополнительные настройки (сворачиваемый блок для чистоты) */}
