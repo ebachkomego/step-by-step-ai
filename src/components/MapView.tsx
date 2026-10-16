@@ -16,6 +16,7 @@ interface MapViewProps {
   onMapClick: (lat: number, lon: number) => void;
   activeStopIndex: number | null;
   isDark: boolean;
+  isTrackingUser?: boolean;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -26,12 +27,16 @@ export const MapView: React.FC<MapViewProps> = ({
   routeData,
   onMapClick,
   activeStopIndex,
+  isTrackingUser = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
+  const userPlacemarkRef = useRef<any>(null);
+  const startPlacemarkRef = useRef<any>(null);
+  const routeCollectionRef = useRef<any>(null);
   const isLoadedRef = useRef<boolean>(false);
 
-  // Инициализация Яндекс Карт
+  // 1. Инициализация Яндекс Карт
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -45,16 +50,20 @@ export const MapView: React.FC<MapViewProps> = ({
           const map = new window.ymaps.Map(containerRef.current, {
             center: [startLat, startLon],
             zoom: 14,
-            controls: [] // Минималистичные кастомные контролы
+            controls: [] // Минималистичный чистый вид в стиле Яндекс Go
           }, {
             suppressMapOpenBlock: true,
             yandexMapDisablePoiInteractivity: false
           });
 
           mapInstanceRef.current = map;
-          isLoadedRef.current = true;
 
-          // Клик по карте для выбора точки
+          // Коллекция для элементов маршрута (остановки и трек)
+          const routeCollection = new window.ymaps.GeoObjectCollection();
+          map.geoObjects.add(routeCollection);
+          routeCollectionRef.current = routeCollection;
+
+          // Клик по карте для выбора произвольной точки старта
           map.events.add('click', (e: any) => {
             const coords = e.get('coords');
             if (coords && coords.length === 2) {
@@ -62,7 +71,20 @@ export const MapView: React.FC<MapViewProps> = ({
             }
           });
 
-          renderAllLayers(map);
+          // Создание стартового маркера
+          updateStartMarker(map, startLat, startLon);
+
+          // Создание маркера пользователя, если координаты уже есть
+          if (userLat !== null && userLon !== null) {
+            updateUserMarker(map, userLat, userLon);
+          }
+
+          // Если уже есть данные маршрута
+          if (routeData) {
+            renderRouteObjects(map, routeCollection, routeData, activeStopIndex);
+          }
+
+          isLoadedRef.current = true;
         } catch (e) {
           console.error('Yandex Maps init error:', e);
         }
@@ -89,119 +111,153 @@ export const MapView: React.FC<MapViewProps> = ({
           // ignore
         }
         mapInstanceRef.current = null;
+        userPlacemarkRef.current = null;
+        startPlacemarkRef.current = null;
+        routeCollectionRef.current = null;
       }
     };
   }, []);
 
-  // Перерисовка слоев при изменении маршрута, точки старта или выбранной остановки
+  // 2. Обновление маркера старта при изменении startLat / startLon
   useEffect(() => {
-    if (mapInstanceRef.current && isLoadedRef.current) {
-      renderAllLayers(mapInstanceRef.current);
-    }
-  }, [startLat, startLon, userLat, userLon, routeData, activeStopIndex]);
+    if (!mapInstanceRef.current || !isLoadedRef.current) return;
+    updateStartMarker(mapInstanceRef.current, startLat, startLon);
+  }, [startLat, startLon]);
 
-  const renderAllLayers = (map: any) => {
-    map.geoObjects.removeAll();
-
-    // 1. Текущее местоположение пользователя (если доступно и отличается от точки старта)
+  // 3. Обновление маркера живой геолокации пользователя при изменении userLat / userLon
+  useEffect(() => {
+    if (!mapInstanceRef.current || !isLoadedRef.current) return;
     if (userLat !== null && userLon !== null) {
-      const isStartSameAsUser = Math.abs(startLat - userLat) < 0.0001 && Math.abs(startLon - userLon) < 0.0001;
-      if (!isStartSameAsUser) {
-        const userPlacemark = new window.ymaps.Placemark(
-          [userLat, userLon],
-          {
-            hintContent: 'Вы находитесь здесь',
-            balloonContent: 'Ваша текущая геопозиция'
-          },
-          {
-            preset: 'islands#geolocationIcon',
-            iconColor: '#2563eb'
-          }
-        );
-        map.geoObjects.add(userPlacemark);
+      updateUserMarker(mapInstanceRef.current, userLat, userLon);
+      
+      // Если включено авто-слежение и нет активного маршрута — плавно центрируем
+      if (isTrackingUser && !routeData) {
+        mapInstanceRef.current.panTo([userLat, userLon], { duration: 300, flying: false });
       }
     }
+  }, [userLat, userLon, isTrackingUser, routeData]);
 
-    // 2. Точка старта (Яндекс-стиль)
-    const startPlacemark = new window.ymaps.Placemark(
-      [startLat, startLon],
-      {
-        hintContent: 'Начало маршрута',
-        balloonContentHeader: '<b style="font-size:14px; color:#16a34a">Точка старта</b>',
-        balloonContentBody: '<div style="font-size:12px; margin-top:4px">Отсюда начнется ваша прогулка. Кликните по карте, чтобы перенести.</div>'
-      },
-      {
-        preset: 'islands#darkGreenDotIconWithCaption',
-        iconCaption: 'Старт'
-      }
-    );
-    map.geoObjects.add(startPlacemark);
+  // 4. Отрисовка маршрута при изменении данных или активной остановки
+  useEffect(() => {
+    if (!mapInstanceRef.current || !routeCollectionRef.current || !isLoadedRef.current) return;
+    renderRouteObjects(mapInstanceRef.current, routeCollectionRef.current, routeData, activeStopIndex);
+  }, [routeData, activeStopIndex]);
 
-    // 3. Если есть построенный маршрут
-    if (routeData && routeData.stops && routeData.stops.length > 0) {
-      // Маркеры остановок
-      routeData.stops.forEach((stop: RouteStop, index: number) => {
-        const isActive = activeStopIndex === index;
-        const stopPlacemark = new window.ymaps.Placemark(
-          [stop.lat, stop.lon],
-          {
-            iconContent: `${index + 1}`,
-            balloonContentHeader: `<b style="font-size:14px">${index + 1}. ${stop.name}</b>`,
-            balloonContentBody: `
-              <div style="font-size:12px; margin-top:4px; line-height:1.4">
-                <div style="color:#64748b; margin-bottom:2px"><b>Категория:</b> ${stop.category}</div>
-                <div style="color:#64748b; margin-bottom:4px"><b>Время в точке:</b> ${stop.spent_minutes} мин.</div>
-                <p style="margin:0; color:#1e293b">${stop.description}</p>
-              </div>
-            `,
-            hintContent: `${index + 1}. ${stop.name}`
-          },
-          {
-            preset: isActive ? 'islands#redCircleIcon' : 'islands#blackCircleIcon',
-            iconColor: isActive ? '#fc3f1d' : '#222222',
-            balloonCloseButton: true
-          }
-        );
-
-        map.geoObjects.add(stopPlacemark);
-
-        if (isActive) {
-          stopPlacemark.balloon.open();
-        }
-      });
-
-      // Линия пешеходного маршрута по реальным улицам
-      if (routeData.geojson?.geometry?.coordinates) {
-        // Координаты GeoJSON [lon, lat] -> Яндекс [lat, lon]
-        const ymapsPoints = routeData.geojson.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]);
-
-        const polyline = new window.ymaps.Polyline(
-          ymapsPoints,
-          {
-            hintContent: `Пешком: ${(routeData.total_distance_meters / 1000).toFixed(1)} км (${routeData.total_walking_minutes} мин.)`
-          },
-          {
-            strokeColor: '#fc3f1d', // Фирменный красный акцент Яндекс
-            strokeWidth: 5,
-            strokeOpacity: 0.9,
-            strokeStyle: 'solid'
-          }
-        );
-
-        map.geoObjects.add(polyline);
-
-        // Плавная анимация к границам маршрута с учетом шторки снизу
-        const bounds = polyline.geometry.getBounds();
-        if (bounds) {
-          map.setBounds(bounds, {
-            checkZoomRange: true,
-            zoomMargin: [60, 20, 260, 20], // Отступ снизу для шторки
-            duration: 500
-          });
-        }
-      }
+  // Хелпер: Обновление / создание маркера старта
+  const updateStartMarker = (map: any, lat: number, lon: number) => {
+    if (startPlacemarkRef.current) {
+      startPlacemarkRef.current.geometry.setCoordinates([lat, lon]);
     } else {
-      map.setCenter([startLat, startLon], 14, { duration: 300 });
+      const startPlacemark = new window.ymaps.Placemark(
+        [lat, lon],
+        {
+          hintContent: 'Точка старта',
+          balloonContentHeader: '<b style="font-size:14px; color:#16a34a">Точка старта</b>',
+          balloonContentBody: '<div style="font-size:12px; margin-top:4px">Отсюда начинается прогулка. Нажмите на карту для выбора другого места.</div>'
+        },
+        {
+          preset: 'islands#darkGreenDotIconWithCaption',
+          iconCaption: 'Старт'
+        }
+      );
+      map.geoObjects.add(startPlacemark);
+      startPlacemarkRef.current = startPlacemark;
+    }
+  };
+
+  // Хелпер: Обновление / создание маркера текущего GPS пользователя
+  const updateUserMarker = (map: any, lat: number, lon: number) => {
+    if (userPlacemarkRef.current) {
+      userPlacemarkRef.current.geometry.setCoordinates([lat, lon]);
+    } else {
+      const userPlacemark = new window.ymaps.Placemark(
+        [lat, lon],
+        {
+          hintContent: 'Вы находитесь здесь (GPS)',
+          balloonContent: '<b>Ваша живая геопозиция</b><div style="font-size:11px;color:#666">Отслеживается в реальном времени</div>'
+        },
+        {
+          preset: 'islands#geolocationIcon',
+          iconColor: '#2563eb'
+        }
+      );
+      map.geoObjects.add(userPlacemark);
+      userPlacemarkRef.current = userPlacemark;
+    }
+  };
+
+  // Хелпер: Отрисовка остановок и линии маршрута в коллекции
+  const renderRouteObjects = (
+    map: any,
+    collection: any,
+    data: RouteResponse | null,
+    activeIndex: number | null
+  ) => {
+    collection.removeAll();
+
+    if (!data || !data.stops || data.stops.length === 0) {
+      return;
+    }
+
+    // Добавляем маркеры остановок
+    data.stops.forEach((stop: RouteStop, index: number) => {
+      const isActive = activeIndex === index;
+      const stopPlacemark = new window.ymaps.Placemark(
+        [stop.lat, stop.lon],
+        {
+          iconContent: `${index + 1}`,
+          balloonContentHeader: `<b style="font-size:14px">${index + 1}. ${stop.name}</b>`,
+          balloonContentBody: `
+            <div style="font-size:12px; margin-top:4px; line-height:1.4">
+              <div style="color:#64748b; margin-bottom:2px"><b>Категория:</b> ${stop.category}</div>
+              <div style="color:#64748b; margin-bottom:4px"><b>Время в точке:</b> ${stop.spent_minutes} мин.</div>
+              <p style="margin:0; color:#1e293b">${stop.description}</p>
+            </div>
+          `,
+          hintContent: `${index + 1}. ${stop.name}`
+        },
+        {
+          preset: isActive ? 'islands#redCircleIcon' : 'islands#blackCircleIcon',
+          iconColor: isActive ? '#fc3f1d' : '#222222',
+          balloonCloseButton: true
+        }
+      );
+
+      collection.add(stopPlacemark);
+
+      if (isActive) {
+        stopPlacemark.balloon.open();
+      }
+    });
+
+    // Добавляем пешеходную линию GeoJSON
+    if (data.geojson?.geometry?.coordinates) {
+      const ymapsPoints = data.geojson.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]);
+
+      const polyline = new window.ymaps.Polyline(
+        ymapsPoints,
+        {
+          hintContent: `Пешком: ${(data.total_distance_meters / 1000).toFixed(1)} км (${data.total_walking_minutes} мин.)`
+        },
+        {
+          strokeColor: '#fc3f1d', // Фирменный акцент Яндекс
+          strokeWidth: 5,
+          strokeOpacity: 0.9,
+          strokeStyle: 'solid'
+        }
+      );
+
+      collection.add(polyline);
+
+      // Плавный зум к границам маршрута с учетом шторки снизу
+      const bounds = polyline.geometry.getBounds();
+      if (bounds) {
+        map.setBounds(bounds, {
+          checkZoomRange: true,
+          zoomMargin: [60, 20, 260, 20],
+          duration: 500
+        });
+      }
     }
   };
 
@@ -211,3 +267,5 @@ export const MapView: React.FC<MapViewProps> = ({
     </div>
   );
 };
+
+export default MapView;

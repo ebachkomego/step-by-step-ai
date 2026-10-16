@@ -6,6 +6,9 @@ export interface RouteRequest {
   is_circular: boolean;
   end_lat?: number;
   end_lon?: number;
+  custom_prompt?: string;
+  activities?: string[];
+  stop_count?: number; // 0 = auto based on duration
   api_key?: string;
 }
 

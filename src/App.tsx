@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MapView } from './components/MapView';
 import { BottomSheet } from './components/BottomSheet';
 import type { RouteRequest, RouteResponse } from './types';
@@ -17,14 +17,18 @@ export const App: React.FC = () => {
   const [startLat, setStartLat] = useState<number>(55.751244);
   const [startLon, setStartLon] = useState<number>(37.618423);
 
-  // Координаты пользователя (GPS)
+  // Живые координаты пользователя (GPS)
   const [userLat, setUserLat] = useState<number | null>(null);
   const [userLon, setUserLon] = useState<number | null>(null);
+  const [isTrackingUser, setIsTrackingUser] = useState<boolean>(true);
 
   const [routeData, setRouteData] = useState<RouteResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeStopIndex, setActiveStopIndex] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const watchIdRef = useRef<number | null>(null);
+  const isInitialLocationSetRef = useRef<boolean>(false);
 
   // Применение темы к <html> элементу
   useEffect(() => {
@@ -39,16 +43,74 @@ export const App: React.FC = () => {
     }
   }, [isDark]);
 
-  // Запрос геолокации при ПЕРВОМ заходе на сайт
+  // Непрерывное отслеживание геолокации в реальном времени (watchPosition)
   useEffect(() => {
-    handleRequestLocation(true);
+    if (!navigator.geolocation) {
+      setErrorMessage('Геолокация не поддерживается вашим браузером');
+      return;
+    }
+
+    const handleSuccess = (pos: GeolocationPosition) => {
+      const { latitude, longitude } = pos.coords;
+      setUserLat(latitude);
+      setUserLon(longitude);
+
+      // При первом получении или если активно слежение за пользователем
+      if (!isInitialLocationSetRef.current) {
+        setStartLat(latitude);
+        setStartLon(longitude);
+        isInitialLocationSetRef.current = true;
+      }
+    };
+
+    const handleError = (err: GeolocationPositionError) => {
+      console.warn('Geolocation watch error:', err.message);
+    };
+
+    const options: PositionOptions = {
+      enableHighAccuracy: true,
+      maximumAge: 5000,
+      timeout: 15000,
+    };
+
+    // Запускаем непрерывное отслеживание GPS
+    const id = navigator.geolocation.watchPosition(handleSuccess, handleError, options);
+    watchIdRef.current = id;
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
   }, []);
 
-  const handleRequestLocation = (isInitial = false) => {
-    if (!navigator.geolocation) {
-      if (!isInitial) {
-        setErrorMessage('Геолокация не поддерживается вашим браузером');
+  // Клик по карте для выбора произвольной точки старта
+  const handleMapClick = (lat: number, lon: number) => {
+    setStartLat(lat);
+    setStartLon(lon);
+    setIsTrackingUser(false); // Пользователь вручную выбрал старт
+    setErrorMessage(null);
+  };
+
+  // Переключение режима слежения за пользователем
+  const handleToggleTracking = () => {
+    if (!isTrackingUser) {
+      setIsTrackingUser(true);
+      if (userLat !== null && userLon !== null) {
+        setStartLat(userLat);
+        setStartLon(userLon);
+      } else {
+        requestInstantLocation();
       }
+    } else {
+      setIsTrackingUser(false);
+    }
+  };
+
+  // Мгновенный запрос местоположения по кнопке
+  const requestInstantLocation = () => {
+    if (!navigator.geolocation) {
+      setErrorMessage('Геолокация недоступна');
       return;
     }
 
@@ -59,22 +121,15 @@ export const App: React.FC = () => {
         setUserLon(longitude);
         setStartLat(latitude);
         setStartLon(longitude);
+        setIsTrackingUser(true);
         setErrorMessage(null);
       },
       (err) => {
-        console.warn('Geolocation prompt:', err.message);
-        if (!isInitial) {
-          setErrorMessage('Доступ к геолокации запрещен. Кликните по карте, чтобы выбрать точку старта.');
-        }
+        console.warn('Geolocation prompt error:', err.message);
+        setErrorMessage('Доступ к геолокации запрещен. Кликните по карте, чтобы выбрать точку старта.');
       },
       { timeout: 10000, enableHighAccuracy: true }
     );
-  };
-
-  const handleMapClick = (lat: number, lon: number) => {
-    setStartLat(lat);
-    setStartLon(lon);
-    setErrorMessage(null);
   };
 
   const handleGenerateRoute = async (params: RouteRequest) => {
@@ -110,7 +165,7 @@ export const App: React.FC = () => {
         console.warn('Backend request bypassed or timed out, using client walk engine.');
       }
 
-      // 2. Если бэкенд недоступен или вернул 500, моментально используем клиентский движок
+      // 2. Если бэкенд недоступен или вернул ошибку, мгновенно используем клиентский AI-движок
       if (!data) {
         data = await generateRouteClientFallback(params);
       }
@@ -122,7 +177,7 @@ export const App: React.FC = () => {
         const fallbackData = await generateRouteClientFallback(params);
         setRouteData(fallbackData);
       } catch (e) {
-        setErrorMessage('Не удалось построить маршрут. Попробуйте еще раз.');
+        setErrorMessage('Не удалось построить маршрут. Попробуйте изменить параметры или запрос.');
       }
     } finally {
       setIsLoading(false);
@@ -141,6 +196,7 @@ export const App: React.FC = () => {
         onMapClick={handleMapClick}
         activeStopIndex={activeStopIndex}
         isDark={isDark}
+        isTrackingUser={isTrackingUser}
       />
 
       {/* 2. Верхняя плавающая панель управления (в стиле Яндекс Карт / Такси) */}
@@ -161,11 +217,12 @@ export const App: React.FC = () => {
           {/* Кнопка "Моё место" */}
           <button
             type="button"
-            onClick={() => handleRequestLocation(false)}
+            onClick={requestInstantLocation}
             aria-label="Мое местоположение"
+            title="Определить мое местоположение"
             className="w-10 h-10 rounded-2xl bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center justify-center text-neutral-700 dark:text-neutral-200 hover:scale-105 active:scale-95 transition-all cursor-pointer"
           >
-            <Navigation className="w-4 h-4 text-blue-500" />
+            <Navigation className={`w-4 h-4 ${isTrackingUser ? 'text-emerald-500 fill-emerald-500/20' : 'text-blue-500'}`} />
           </button>
 
           {/* Переключатель темы (Светлая / Темная) */}
@@ -187,7 +244,7 @@ export const App: React.FC = () => {
           <span className="flex-1">{errorMessage}</span>
           <button
             onClick={() => setErrorMessage(null)}
-            className="text-white/80 hover:text-white font-bold ml-2 text-sm"
+            className="text-white/80 hover:text-white font-bold ml-2 text-sm cursor-pointer"
           >
             ✕
           </button>
@@ -204,7 +261,9 @@ export const App: React.FC = () => {
         onSelectStop={(idx) => setActiveStopIndex(idx)}
         onSubmit={handleGenerateRoute}
         onReset={() => setRouteData(null)}
-        onCurrentLocation={() => handleRequestLocation(false)}
+        onCurrentLocation={requestInstantLocation}
+        isTrackingUser={isTrackingUser}
+        onToggleTracking={handleToggleTracking}
       />
     </div>
   );
