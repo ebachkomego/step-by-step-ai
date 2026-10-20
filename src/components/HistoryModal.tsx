@@ -95,7 +95,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
               return (
                 <div
                   key={item.id}
-                  className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-850 border border-neutral-200/70 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700 transition-all space-y-3"
+                  className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200/70 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 transition-all space-y-3"
                 >
                   {/* Верхняя строка карточки: сценарий + дата + удаление */}
                   <div className="flex items-start justify-between gap-2">
@@ -119,14 +119,14 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                       type="button"
                       onClick={() => onDeleteRoute(item.id)}
                       title="Удалить из истории"
-                      className="text-neutral-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-neutral-200/50 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                      className="text-neutral-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-neutral-200/50 dark:hover:bg-neutral-700/60 transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
 
                   {/* Ключевые показатели прогулки */}
-                  <div className="grid grid-cols-3 gap-2 py-2 px-3 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200/50 dark:border-neutral-800 text-xs">
+                  <div className="grid grid-cols-3 gap-2 py-2 px-3 rounded-xl bg-white dark:bg-neutral-900/90 border border-neutral-200/50 dark:border-neutral-700/80 text-xs">
                     <div>
                       <span className="text-[10px] text-neutral-400 uppercase font-bold block">Время</span>
                       <span className="font-extrabold text-neutral-900 dark:text-white">
@@ -154,7 +154,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                         {item.stops.slice(0, 3).map((stop, sIdx) => (
                           <span
                             key={sIdx}
-                            className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-lg bg-neutral-200/60 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-300 truncate max-w-[200px]"
+                            className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-lg bg-neutral-200/60 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 truncate max-w-[200px]"
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
                             {stop.name}
@@ -173,7 +173,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                   <button
                     type="button"
                     onClick={() => onSelectRoute(item)}
-                    className="w-full py-2.5 px-4 rounded-xl bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 text-white dark:text-neutral-900 font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+                    className="w-full py-2.5 px-4 rounded-xl bg-neutral-900 hover:bg-neutral-800 dark:bg-amber-400 dark:hover:bg-amber-300 text-white dark:text-neutral-950 font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98] cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>Повторить эту прогулку</span>

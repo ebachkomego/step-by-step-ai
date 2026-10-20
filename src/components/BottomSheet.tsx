@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import type { RouteResponse, RouteRequest, RouteStop } from '../types';
+import type { RouteResponse, RouteRequest, RouteStop, DesiredWaypoint } from '../types';
 import { 
   Heart, 
   Landmark, 
@@ -15,7 +15,10 @@ import {
   History,
   ChevronLeft,
   ChevronRight,
-  Star
+  Star,
+  Plus,
+  X,
+  Check
 } from 'lucide-react';
 import { calculateStopCount } from '../services/clientRouteEngine';
 
@@ -28,13 +31,16 @@ interface BottomSheetProps {
   onSelectStop: (index: number) => void;
   onSubmit: (params: RouteRequest) => void;
   onReset: () => void;
-  isTrackingUser: boolean;
-  onToggleTracking: () => void;
+  isTrackingUser?: boolean;
+  onToggleTracking?: () => void;
   onOpenHistory?: () => void;
   historyCount?: number;
   onOpenPlaceDetails?: (stop: RouteStop, index: number) => void;
   isDesktopCollapsed?: boolean;
   onToggleDesktopCollapse?: () => void;
+  waypoints?: DesiredWaypoint[];
+  onRemoveWaypoint?: (id: string) => void;
+  onClearWaypoints?: () => void;
 }
 
 const SCENARIOS = [
@@ -86,6 +92,9 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   onOpenPlaceDetails,
   isDesktopCollapsed: isDesktopCollapsedProp,
   onToggleDesktopCollapse,
+  waypoints = [],
+  onRemoveWaypoint,
+  onClearWaypoints,
 }) => {
   const [scenario, setScenario] = useState<string>('date');
   const [duration, setDuration] = useState<number>(60);
@@ -165,6 +174,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
       custom_prompt: customPrompt.trim() || undefined,
       activities: selectedActivities,
       stop_count: manualStopCount > 0 ? manualStopCount : undefined,
+      waypoints: waypoints.length > 0 ? waypoints : undefined,
     });
     setSheetState('normal');
   };
@@ -227,44 +237,20 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         {!routeData ? (
           /* ================= ЭКРАН НАСТРОЙКИ МАРШРУТА ================= */
           <>
-            {/* Шапка: Чистый заголовок + кнопки */}
+            {/* Шапка: Чистый заголовок + бейдж */}
             <div className="flex items-center justify-between pt-2 md:pt-4">
               <h2 className="text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
                 Куда пойдём?
               </h2>
 
-              <div className="flex items-center gap-2">
-                {onOpenHistory && (
-                  <button
-                    type="button"
-                    onClick={onOpenHistory}
-                    title="История прошлых прогулок"
-                    className="px-3 py-2 text-xs font-bold rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 flex items-center gap-1.5 transition-all cursor-pointer"
-                  >
-                    <History className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-300" />
-                    <span>История</span>
-                    {historyCount && historyCount > 0 ? (
-                      <span className="w-4 h-4 rounded-full bg-amber-500 text-neutral-950 text-[10px] font-black flex items-center justify-center">
-                        {historyCount}
-                      </span>
-                    ) : null}
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={onToggleTracking}
-                  title={isTrackingUser ? 'Точка старта привязана к вашему GPS' : 'Привязать старт к вашему GPS'}
-                  className={`px-3.5 py-2 text-xs font-bold rounded-full flex items-center gap-1.5 transition-all cursor-pointer ${
-                    isTrackingUser
-                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-300/50'
-                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
-                  }`}
-                >
-                  <Navigation className={`w-3.5 h-3.5 ${isTrackingUser ? 'text-emerald-500 fill-emerald-500/20' : 'text-neutral-500'}`} />
-                  <span>Моё место</span>
-                </button>
-              </div>
+              {waypoints.length > 0 && (
+                <span className="text-xs font-bold px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300/40 dark:border-amber-700/40 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span>
+                    {waypoints.length} {waypoints.length === 1 ? 'место по пути' : waypoints.length < 5 ? 'места по пути' : 'мест по пути'}
+                  </span>
+                </span>
+              )}
             </div>
 
             {/* 1. Поле пожелания нейросети */}
@@ -302,6 +288,59 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Блок: Точки и места, куда зайти по пути */}
+            <div className="space-y-2 p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200/70 dark:border-neutral-700/60">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Места по пути</span>
+                  {waypoints.length > 0 && (
+                    <span className="text-[11px] font-extrabold px-1.5 py-0.2 rounded-md bg-amber-400 text-neutral-950">
+                      {waypoints.length}
+                    </span>
+                  )}
+                </span>
+                {waypoints.length > 0 && onClearWaypoints && (
+                  <button
+                    type="button"
+                    onClick={onClearWaypoints}
+                    className="text-[11px] font-semibold text-rose-500 hover:underline cursor-pointer"
+                  >
+                    Очистить
+                  </button>
+                )}
+              </div>
+
+              {waypoints.length === 0 ? (
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
+                  Ищите заведения или улицы через поиск вверху и нажимайте{' '}
+                  <span className="font-bold text-amber-600 dark:text-amber-400">+ По пути</span>, чтобы включить их в свой маршрут.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {waypoints.map((wp) => (
+                    <span
+                      key={wp.id}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-amber-100/80 dark:bg-amber-950/70 border border-amber-300/60 dark:border-amber-700/60 text-amber-950 dark:text-amber-200"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                      <span className="truncate max-w-[170px]">{wp.name}</span>
+                      {onRemoveWaypoint && (
+                        <button
+                          type="button"
+                          onClick={() => onRemoveWaypoint(wp.id)}
+                          className="hover:text-rose-600 dark:hover:text-rose-400 text-neutral-400 p-0.5 rounded-full cursor-pointer ml-0.5"
+                          title="Удалить эту точку"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* 2. Сценарии прогулок */}
@@ -682,6 +721,11 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                             <h4 className="text-sm font-bold text-neutral-900 dark:text-white truncate">
                               {stop.name}
                             </h4>
+                            {stop.is_custom_waypoint && (
+                              <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-emerald-500 text-white shrink-0 shadow-xs">
+                                ★ По пути
+                              </span>
+                            )}
                           </div>
                           <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 shrink-0">
                             {stop.spent_minutes} мин

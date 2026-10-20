@@ -321,6 +321,7 @@ export const MapView: React.FC<MapViewProps> = ({
               <b style="font-size:15px; color:#0f172a;">${index + 1}. ${stop.name}</b>
               <span style="font-size:12px; font-weight:800; color:#eab308; white-space:nowrap;">★ ${rating}</span>
             </div>
+            ${stop.is_custom_waypoint ? '<div style="margin-top:2px;"><span style="font-size:10px; font-weight:800; background:#10b981; color:#fff; padding:2px 6px; border-radius:6px;">★ ВАША ТОЧКА ПО ПУТИ</span></div>' : ''}
           `,
           balloonContentBody: `
             <div style="font-size:12px; font-family:-apple-system,BlinkMacSystemFont,sans-serif; min-width:230px; line-height:1.4; padding-top:2px;">
@@ -343,8 +344,12 @@ export const MapView: React.FC<MapViewProps> = ({
           hintContent: `${index + 1}. ${stop.name}`,
         },
         {
-          preset: isActive ? 'islands#redCircleIcon' : 'islands#blackCircleIcon',
-          iconColor: isActive ? '#fc3f1d' : '#222222',
+          preset: isActive 
+            ? 'islands#redCircleIcon' 
+            : (stop.is_custom_waypoint ? 'islands#darkGreenCircleIcon' : 'islands#blackCircleIcon'),
+          iconColor: isActive 
+            ? '#fc3f1d' 
+            : (stop.is_custom_waypoint ? '#10b981' : '#222222'),
           balloonCloseButton: true,
         }
       );

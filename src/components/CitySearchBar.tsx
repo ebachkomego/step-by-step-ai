@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, MapPin, X, Loader2 } from 'lucide-react';
+import { Search, MapPin, X, Loader2, Plus, Check } from 'lucide-react';
+import type { DesiredWaypoint } from '../types';
 
 interface SearchResultItem {
   id: string;
@@ -11,9 +12,15 @@ interface SearchResultItem {
 
 interface CitySearchBarProps {
   onSelectLocation: (lat: number, lon: number, name: string) => void;
+  onAddWaypoint?: (wp: DesiredWaypoint) => void;
+  existingWaypointIds?: string[];
 }
 
-export const CitySearchBar: React.FC<CitySearchBarProps> = ({ onSelectLocation }) => {
+export const CitySearchBar: React.FC<CitySearchBarProps> = ({
+  onSelectLocation,
+  onAddWaypoint,
+  existingWaypointIds = [],
+}) => {
   const [query, setQuery] = useState<string>('');
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -118,7 +125,7 @@ export const CitySearchBar: React.FC<CitySearchBarProps> = ({ onSelectLocation }
   };
 
   return (
-    <div ref={containerRef} className="relative flex-1 max-w-xs md:max-w-md mx-2 pointer-events-auto">
+    <div ref={containerRef} className="relative flex-1 min-w-0 pointer-events-auto">
       <div className="relative flex items-center">
         <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 pointer-events-none" />
         <input
@@ -155,28 +162,77 @@ export const CitySearchBar: React.FC<CitySearchBarProps> = ({ onSelectLocation }
       {/* Выпадающий список подсказок городов и локаций */}
       {isOpen && results.length > 0 && (
         <div className="absolute top-12 inset-x-0 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-neutral-200/80 dark:border-neutral-800 overflow-hidden z-50 divide-y divide-neutral-100 dark:divide-neutral-800/60 animate-in fade-in slide-in-from-top-2 duration-150">
-          {results.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => handleSelect(item)}
-              className="w-full px-3.5 py-2.5 text-left flex items-start gap-2.5 hover:bg-neutral-100/70 dark:hover:bg-neutral-800/70 transition-colors cursor-pointer group"
-            >
-              <div className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                <MapPin className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs sm:text-sm font-bold text-neutral-900 dark:text-white truncate">
-                  {item.name}
-                </div>
-                {item.description && (
-                  <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
-                    {item.description}
+          {results.map((item) => {
+            const isAlreadyAdded = existingWaypointIds.includes(item.id);
+
+            return (
+              <div
+                key={item.id}
+                className="w-full px-3 py-2.5 flex items-center justify-between gap-2 hover:bg-neutral-100/70 dark:hover:bg-neutral-800/70 transition-colors group"
+              >
+                {/* Клик по левой части = сделать точкой старта */}
+                <button
+                  type="button"
+                  onClick={() => handleSelect(item)}
+                  className="flex items-start gap-2.5 flex-1 min-w-0 text-left cursor-pointer"
+                  title="Установить как точку старта маршрута"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                    <MapPin className="w-3.5 h-3.5" />
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs sm:text-sm font-bold text-neutral-900 dark:text-white truncate">
+                      {item.name}
+                    </div>
+                    {item.description && (
+                      <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
+                        {item.description}
+                      </div>
+                    )}
+                  </div>
+                </button>
+
+                {/* Кнопка "По пути" = добавить как промежуточную остановку */}
+                {onAddWaypoint && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!isAlreadyAdded) {
+                        onAddWaypoint({
+                          id: item.id,
+                          name: item.name,
+                          lat: item.lat,
+                          lon: item.lon,
+                          address: item.description,
+                        });
+                      }
+                      setIsOpen(false);
+                    }}
+                    disabled={isAlreadyAdded}
+                    className={`shrink-0 px-2.5 py-1 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer ${
+                      isAlreadyAdded
+                        ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 cursor-default'
+                        : 'bg-amber-100/90 hover:bg-amber-200 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-900 dark:text-amber-300 active:scale-95'
+                    }`}
+                    title={isAlreadyAdded ? 'Уже добавлено в маршрут' : 'Добавить это место как остановку по пути'}
+                  >
+                    {isAlreadyAdded ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                        <span>В пути</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-3 h-3" />
+                        <span>По пути</span>
+                      </>
+                    )}
+                  </button>
                 )}
               </div>
-            </button>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

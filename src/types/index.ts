@@ -1,3 +1,13 @@
+export interface DesiredWaypoint {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  address?: string;
+  category?: string;
+  photo_url?: string;
+}
+
 export interface RouteRequest {
   start_lat: number;
   start_lon: number;
@@ -10,6 +20,7 @@ export interface RouteRequest {
   activities?: string[];
   stop_count?: number; // 0 = auto based on duration
   api_key?: string;
+  waypoints?: DesiredWaypoint[];
 }
 
 export interface PlaceReview {
@@ -37,6 +48,7 @@ export interface RouteStop {
   opening_hours?: string;
   tags?: string[];
   reviews?: PlaceReview[];
+  is_custom_waypoint?: boolean;
 }
 
 export interface RouteResponse {

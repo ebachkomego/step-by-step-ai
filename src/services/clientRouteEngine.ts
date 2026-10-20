@@ -99,6 +99,32 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
   return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Оптимальный связный порядок остановок пешком (жадный алгоритм ближайшего соседа)
+function orderStopsGreedy(startLat: number, startLon: number, stops: RouteStop[]): RouteStop[] {
+  if (stops.length <= 1) return stops;
+  const pool = [...stops];
+  const ordered: RouteStop[] = [];
+  let curLat = startLat;
+  let curLon = startLon;
+
+  while (pool.length > 0) {
+    let bestIdx = 0;
+    let minDist = Infinity;
+    for (let i = 0; i < pool.length; i++) {
+      const d = getDistance(curLat, curLon, pool[i].lat, pool[i].lon);
+      if (d < minDist) {
+        minDist = d;
+        bestIdx = i;
+      }
+    }
+    const nextStop = pool.splice(bestIdx, 1)[0];
+    ordered.push(nextStop);
+    curLat = nextStop.lat;
+    curLon = nextStop.lon;
+  }
+  return ordered;
+}
+
 // Категоризация
 function getReadableCategory(tags: Record<string, string>): string {
   if (tags.amenity === 'cafe' || tags.amenity === 'coffee_shop') return 'Кофейня';
@@ -285,6 +311,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     activities = [],
     stop_count = 0,
     api_key,
+    waypoints = [],
   } = params;
 
   // Динамический комфортный радиус района: СТРОГО от 450 до 1100 метров, чтобы никогда не уходить за город!
@@ -333,7 +360,29 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
   // Расчет комфортного бюджета: ~30-35% на неспешный шаг, остальное — на отдых и беседы
   const walkingBudgetMin = Math.min(45, Math.max(12, Math.round(duration_minutes * 0.32)));
   const spentBudgetMin = duration_minutes - walkingBudgetMin;
-  const defaultSpentPerStop = Math.max(15, Math.round(spentBudgetMin / targetStopCount));
+  const defaultSpentPerStop = Math.max(15, Math.round(spentBudgetMin / Math.max(1, targetStopCount)));
+
+  // Обязательные точки, отмеченные пользователем
+  const customWaypointStops: RouteStop[] = (waypoints || []).map((w, idx) => ({
+    id: w.id || `custom_waypoint_${idx}`,
+    name: w.name,
+    category: w.category || 'Выбранное место',
+    lat: w.lat,
+    lon: w.lon,
+    spent_minutes: defaultSpentPerStop,
+    description: `Выбранная вами точка для посещения по пути: ${w.name}${w.address ? ` (${w.address})` : ''}.`,
+    order: 0,
+    address: w.address,
+    photo_url: w.photo_url,
+    rating: 4.9,
+    reviews_count: 120,
+    opening_hours: 'Открыто для посещения',
+    tags: ['Выбранная вами точка', 'Посетить по пути'],
+    is_custom_waypoint: true,
+  }));
+
+  // Добавляем обязательные точки пользователя первыми
+  selectedStops.push(...customWaypointStops);
 
   if (llmPlan && llmPlan.stops && llmPlan.stops.length > 0) {
     usedModelName = llmPlan.model;
@@ -341,8 +390,9 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     customTitle = llmPlan.scenario_title;
 
     for (const stop of llmPlan.stops) {
+      if (selectedStops.length >= Math.max(targetStopCount, customWaypointStops.length)) break;
       const match = poiMap.get(stop.id);
-      if (match) {
+      if (match && !selectedStops.some((s) => s.name.toLowerCase() === match.name.toLowerCase())) {
         selectedStops.push({
           id: match.id,
           name: match.name,
@@ -366,8 +416,8 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
 
   // 2. Если нейросеть вернула меньше точек (например при сбое сети), дополняем из реальных заведений
   if (selectedStops.length < targetStopCount) {
-    const existingNames = new Set(selectedStops.map((s) => s.name));
-    const remaining = parsedPois.filter((p) => !existingNames.has(p.name));
+    const existingNames = new Set(selectedStops.map((s) => s.name.toLowerCase()));
+    const remaining = parsedPois.filter((p) => !existingNames.has(p.name.toLowerCase()));
     remaining.sort((a, b) => a.angle - b.angle);
 
     const needed = targetStopCount - selectedStops.length;
@@ -401,16 +451,32 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     }
   }
 
+  // Если были выбраны пользовательские точки, отражаем это в описании маршрута
+  if (customWaypointStops.length > 0) {
+    const wpNames = customWaypointStops.map((w) => w.name).join(', ');
+    aiThought = `Маршрут построен с обязательным посещением выбранных вами мест: ${wpNames}. Остановки выстроены в оптимальном пешеходном порядке.`;
+    if (!customTitle) {
+      customTitle = `Прогулка с заездом в ${customWaypointStops[0].name}`;
+    }
+  }
+
+  // Упорядочиваем остановки в логический пешеходный порядок от точки старта
+  const orderedStops = orderStopsGreedy(start_lat, start_lon, selectedStops);
+
   // Превращаем в итоговый массив остановок с полным обогащением (фото, рейтинг, отзывы, адрес)
-  const finalStops: RouteStop[] = selectedStops.map((s, idx) =>
-    enrichStopWithRealDetails(
+  const finalStops: RouteStop[] = orderedStops.map((s, idx) => {
+    const enriched = enrichStopWithRealDetails(
       {
         ...s,
         order: idx + 1,
       },
       idx
-    )
-  );
+    );
+    if (s.is_custom_waypoint) {
+      enriched.is_custom_waypoint = true;
+    }
+    return enriched;
+  });
 
   // Строим пешеходный трек по реальным улицам через публичный HTTPS OSRM
   const coords: [number, number][] = [[start_lon, start_lat]];

@@ -5,7 +5,7 @@ import { LayersModal } from './components/LayersModal';
 import { HistoryModal } from './components/HistoryModal';
 import { CitySearchBar } from './components/CitySearchBar';
 import { PlaceDetailsModal } from './components/PlaceDetailsModal';
-import type { RouteRequest, RouteResponse, MapLayerType, RouteHistoryItem, RouteStop } from './types';
+import type { RouteRequest, RouteResponse, MapLayerType, RouteHistoryItem, RouteStop, DesiredWaypoint } from './types';
 import { Sun, Moon, Navigation, AlertCircle, History, Layers } from 'lucide-react';
 import { generateRouteClientFallback } from './services/clientRouteEngine';
 
@@ -61,8 +61,50 @@ export const App: React.FC = () => {
     index: number;
   } | null>(null);
 
+  // Точки / заведения, которые пользователь отметил для обязательного посещения по пути
+  const [waypoints, setWaypoints] = useState<DesiredWaypoint[]>([]);
+
   // Состояние сворачивания боковой панели на ПК
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState<boolean>(false);
+
+  const handleAddWaypoint = (wp: DesiredWaypoint) => {
+    setWaypoints((prev) => {
+      if (prev.some((w) => w.id === wp.id || (Math.abs(w.lat - wp.lat) < 0.0001 && Math.abs(w.lon - wp.lon) < 0.0001))) {
+        return prev;
+      }
+      return [...prev, wp];
+    });
+  };
+
+  const handleRemoveWaypoint = (id: string) => {
+    setWaypoints((prev) => prev.filter((w) => w.id !== id));
+  };
+
+  const handleClearWaypoints = () => {
+    setWaypoints([]);
+  };
+
+  const handleToggleWaypoint = (stop: RouteStop) => {
+    setWaypoints((prev) => {
+      const exists = prev.some((w) => w.id === stop.id || (Math.abs(w.lat - stop.lat) < 0.0001 && Math.abs(w.lon - stop.lon) < 0.0001));
+      if (exists) {
+        return prev.filter((w) => w.id !== stop.id && !(Math.abs(w.lat - stop.lat) < 0.0001 && Math.abs(w.lon - stop.lon) < 0.0001));
+      } else {
+        return [
+          ...prev,
+          {
+            id: stop.id || `wp_${Date.now()}`,
+            name: stop.name,
+            lat: stop.lat,
+            lon: stop.lon,
+            address: stop.address,
+            category: stop.category,
+            photo_url: stop.photo_url,
+          },
+        ];
+      }
+    });
+  };
 
   const watchIdRef = useRef<number | null>(null);
   const isInitialLocationSetRef = useRef<boolean>(false);
@@ -333,54 +375,41 @@ export const App: React.FC = () => {
       />
 
       {/* 2. Верхняя плавающая панель управления и поиска */}
-      <div
-        className={`absolute top-3 inset-x-3 sm:top-4 transition-all duration-300 pointer-events-none z-20 flex items-center justify-between gap-2 ${
-          isDesktopCollapsed
-            ? 'md:inset-x-6 md:max-w-5xl md:mx-auto'
-            : 'md:left-4 md:right-[460px] lg:md:right-[500px]'
-        }`}
-      >
+      <div className="absolute top-3 inset-x-3 sm:top-4 sm:left-4 sm:right-auto z-20 pointer-events-none flex items-center gap-2 max-w-full sm:max-w-xl md:max-w-2xl sm:w-full">
         {/* Логотип */}
-        <div className="pointer-events-auto bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center gap-2 shrink-0">
+        <div className="pointer-events-auto bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md px-3 sm:px-3.5 py-2 rounded-2xl shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center gap-1.5 sm:gap-2 shrink-0">
           <span className="w-2.5 h-2.5 rounded-full bg-[#FFCC00] animate-pulse" />
-          <span className="font-extrabold text-sm tracking-tight text-neutral-900 dark:text-white">
+          <span className="font-extrabold text-xs sm:text-sm tracking-tight text-neutral-900 dark:text-white">
             StepByStep
           </span>
         </div>
 
         {/* Поиск городов и мест (между названием и историей) */}
-        <div className="pointer-events-auto flex-1 max-w-md min-w-0">
-          <CitySearchBar onSelectLocation={handleSelectSearchLocation} />
+        <div className="pointer-events-auto flex-1 min-w-0">
+          <CitySearchBar
+            onSelectLocation={handleSelectSearchLocation}
+            onAddWaypoint={handleAddWaypoint}
+            existingWaypointIds={waypoints.map((w) => w.id)}
+          />
         </div>
 
-        {/* Кнопки переключения темы, слоев, истории и геолокации */}
-        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {/* Кнопки истории и темы */}
+        <div className="pointer-events-auto flex items-center gap-1.5 shrink-0">
           {/* Кнопка "История прогулок" */}
           <button
             type="button"
             onClick={() => setIsHistoryOpen(true)}
             aria-label="История прогулок"
             title="История прошлых прогулок"
-            className="h-10 px-3 rounded-2xl bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center gap-1.5 text-neutral-700 dark:text-neutral-200 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+            className="h-10 px-2.5 sm:px-3 rounded-2xl bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center gap-1.5 text-neutral-700 dark:text-neutral-200 hover:scale-105 active:scale-95 transition-all cursor-pointer"
           >
             <History className="w-4 h-4 text-amber-500" />
-            <span className="text-xs font-bold hidden sm:inline">История</span>
+            <span className="text-xs font-bold hidden md:inline">История</span>
             {history.length > 0 && (
               <span className="w-4 h-4 rounded-full bg-amber-500 text-neutral-950 text-[10px] font-black flex items-center justify-center">
                 {history.length}
               </span>
             )}
-          </button>
-
-          {/* Кнопка "Слои карты" */}
-          <button
-            type="button"
-            onClick={() => setIsLayersOpen(true)}
-            aria-label="Слои карты"
-            title="Слои карты: Схема, Спутник, Гибрид"
-            className="w-10 h-10 rounded-2xl bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center justify-center text-neutral-700 dark:text-neutral-200 hover:scale-105 active:scale-95 transition-all cursor-pointer"
-          >
-            <Layers className="w-4 h-4 text-blue-500" />
           </button>
 
           {/* Переключатель темы (Светлая / Темная) */}
@@ -392,17 +421,6 @@ export const App: React.FC = () => {
             className="w-10 h-10 rounded-2xl bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center justify-center text-neutral-700 dark:text-neutral-200 hover:scale-105 active:scale-95 transition-all cursor-pointer"
           >
             {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-neutral-600" />}
-          </button>
-
-          {/* Кнопка "Моё место" */}
-          <button
-            type="button"
-            onClick={requestInstantLocation}
-            aria-label="Моё местоположение"
-            title="Определить моё местоположение"
-            className="w-10 h-10 rounded-2xl bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center justify-center text-neutral-700 dark:text-neutral-200 hover:scale-105 active:scale-95 transition-all cursor-pointer"
-          >
-            <Navigation className={`w-4 h-4 ${isTrackingUser ? 'text-emerald-500 fill-emerald-500/20' : 'text-blue-500'}`} />
           </button>
         </div>
       </div>
@@ -438,6 +456,9 @@ export const App: React.FC = () => {
         onOpenPlaceDetails={(stop, index) => setSelectedPlaceDetails({ stop, index })}
         isDesktopCollapsed={isDesktopCollapsed}
         onToggleDesktopCollapse={() => setIsDesktopCollapsed((prev) => !prev)}
+        waypoints={waypoints}
+        onRemoveWaypoint={handleRemoveWaypoint}
+        onClearWaypoints={handleClearWaypoints}
       />
 
       {/* 5. Модальное окно слоев карты (Схема / Спутник / Гибрид) */}
@@ -465,6 +486,22 @@ export const App: React.FC = () => {
         stop={selectedPlaceDetails?.stop || null}
         stopIndex={selectedPlaceDetails?.index}
         onClose={() => setSelectedPlaceDetails(null)}
+        isWaypoint={Boolean(
+          selectedPlaceDetails?.stop &&
+          waypoints.some(
+            (w) =>
+              w.id === selectedPlaceDetails.stop.id ||
+              (Math.abs(w.lat - selectedPlaceDetails.stop.lat) < 0.0001 &&
+                Math.abs(w.lon - selectedPlaceDetails.stop.lon) < 0.0001)
+          )
+        )}
+        onToggleWaypoint={handleToggleWaypoint}
+        onSetAsStart={(stop) => {
+          setStartLat(stop.lat);
+          setStartLon(stop.lon);
+          setIsTrackingUser(false);
+          setRouteData(null);
+        }}
       />
     </div>
   );

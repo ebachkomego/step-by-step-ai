@@ -1,17 +1,23 @@
 import React from 'react';
 import type { RouteStop } from '../types';
-import { X, Star, MapPin, Clock, Coffee, Sparkles, CheckCircle2 } from 'lucide-react';
+import { X, Star, MapPin, Clock, Coffee, Sparkles, CheckCircle2, Plus, Check, Navigation } from 'lucide-react';
 
 interface PlaceDetailsModalProps {
   stop: RouteStop | null;
   onClose: () => void;
   stopIndex?: number | null;
+  isWaypoint?: boolean;
+  onToggleWaypoint?: (stop: RouteStop) => void;
+  onSetAsStart?: (stop: RouteStop) => void;
 }
 
 export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
   stop,
   onClose,
   stopIndex,
+  isWaypoint = false,
+  onToggleWaypoint,
+  onSetAsStart,
 }) => {
   if (!stop) return null;
 
@@ -54,12 +60,20 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
             <X className="w-4 h-4" />
           </button>
 
-          {/* Номер остановки в маршруте */}
-          {stopIndex !== undefined && stopIndex !== null && (
-            <div className="absolute top-3.5 left-3.5 px-3 py-1 rounded-full bg-amber-400 text-neutral-950 font-black text-xs shadow-md">
-              Остановка #{stopIndex + 1}
-            </div>
-          )}
+          {/* Бейджи на фото */}
+          <div className="absolute top-3.5 left-3.5 flex items-center gap-1.5 z-10">
+            {stopIndex !== undefined && stopIndex !== null && (
+              <div className="px-3 py-1 rounded-full bg-amber-400 text-neutral-950 font-black text-xs shadow-md">
+                Остановка #{stopIndex + 1}
+              </div>
+            )}
+            {(isWaypoint || stop.is_custom_waypoint) && (
+              <div className="px-3 py-1 rounded-full bg-emerald-500 text-white font-extrabold text-xs shadow-md flex items-center gap-1">
+                <Check className="w-3 h-3" />
+                <span>Точка по пути</span>
+              </div>
+            )}
+          </div>
 
           {/* Название и категория на фоне фото */}
           <div className="absolute bottom-3 left-4 right-4 text-white">
@@ -176,14 +190,53 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
           </div>
         </div>
 
-        {/* Нижняя кнопка закрытия */}
-        <div className="p-4 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50">
+        {/* Нижние кнопки действий */}
+        <div className="p-4 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50 flex flex-col sm:flex-row items-center gap-2">
+          {onToggleWaypoint && (
+            <button
+              type="button"
+              onClick={() => onToggleWaypoint(stop)}
+              className={`w-full sm:flex-1 py-3 rounded-2xl font-bold text-sm shadow-md transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 ${
+                isWaypoint || stop.is_custom_waypoint
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                  : 'bg-amber-400 hover:bg-amber-300 text-neutral-950'
+              }`}
+            >
+              {isWaypoint || stop.is_custom_waypoint ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>✓ В вашем маршруте (убрать)</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  <span>+ Посетить по пути</span>
+                </>
+              )}
+            </button>
+          )}
+
+          {onSetAsStart && (
+            <button
+              type="button"
+              onClick={() => {
+                onSetAsStart(stop);
+                onClose();
+              }}
+              className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 font-bold text-xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
+              title="Сделать это место началом прогулки"
+            >
+              <Navigation className="w-3.5 h-3.5 text-blue-500" />
+              <span>Старт отсюда</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onClose}
-            className="w-full py-3 rounded-2xl bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 text-white dark:text-neutral-950 font-bold text-sm shadow-md transition-all active:scale-[0.98] cursor-pointer"
+            className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-neutral-200/80 dark:bg-neutral-800 hover:bg-neutral-300 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 font-bold text-sm transition-all active:scale-[0.98] cursor-pointer"
           >
-            Понятно
+            Закрыть
           </button>
         </div>
       </div>
