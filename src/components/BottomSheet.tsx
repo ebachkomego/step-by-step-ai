@@ -33,6 +33,8 @@ interface BottomSheetProps {
   onOpenHistory?: () => void;
   historyCount?: number;
   onOpenPlaceDetails?: (stop: RouteStop, index: number) => void;
+  isDesktopCollapsed?: boolean;
+  onToggleDesktopCollapse?: () => void;
 }
 
 const SCENARIOS = [
@@ -82,6 +84,8 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   onOpenHistory,
   historyCount,
   onOpenPlaceDetails,
+  isDesktopCollapsed: isDesktopCollapsedProp,
+  onToggleDesktopCollapse,
 }) => {
   const [scenario, setScenario] = useState<string>('date');
   const [duration, setDuration] = useState<number>(60);
@@ -91,7 +95,9 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   const [sheetState, setSheetState] = useState<'collapsed' | 'normal' | 'expanded'>('normal');
 
   // Состояние на ПК (боковая панель справа): свернута вбок или открыта
-  const [isDesktopCollapsed, setIsDesktopCollapsed] = useState<boolean>(false);
+  const [internalDesktopCollapsed, setInternalDesktopCollapsed] = useState<boolean>(false);
+  const isDesktopCollapsed = isDesktopCollapsedProp !== undefined ? isDesktopCollapsedProp : internalDesktopCollapsed;
+  const toggleDesktopCollapse = onToggleDesktopCollapse || (() => setInternalDesktopCollapsed(!internalDesktopCollapsed));
 
   // Кастомный промпт нейросети и выбранные активности
   const [customPrompt, setCustomPrompt] = useState<string>('');
@@ -185,7 +191,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
       {/* Кнопка сворачивания/разворачивания боковой панели на ПК */}
       <button
         type="button"
-        onClick={() => setIsDesktopCollapsed(!isDesktopCollapsed)}
+        onClick={toggleDesktopCollapse}
         title={isDesktopCollapsed ? 'Развернуть панель маршрута' : 'Свернуть панель вправо'}
         className="hidden md:flex absolute top-24 -left-10 w-10 h-16 bg-white dark:bg-neutral-900 border-l border-t border-b border-neutral-200/90 dark:border-neutral-800 rounded-l-2xl shadow-xl items-center justify-center text-neutral-600 dark:text-neutral-300 hover:text-amber-500 cursor-pointer transition-all z-40"
       >
@@ -562,7 +568,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                     {routeData.scenario_title}
                   </span>
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-bold truncate max-w-[170px]">
-                    {routeData.ai_model || 'Gemini 2.5 Flash'}
+                    {routeData.ai_model || 'Gemini 3.5 Flash'}
                   </span>
                 </div>
 
@@ -616,7 +622,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   <Sparkles className="w-4 h-4 text-amber-500 animate-pulse shrink-0" />
                   <span>Замысел прогулки от нейросети</span>
                   <span className="text-xs ml-auto px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 font-semibold truncate max-w-[150px]">
-                    {routeData.ai_model || 'Gemini 2.5 Flash'}
+                    {routeData.ai_model || 'Gemini 3.5 Flash'}
                   </span>
                 </div>
                 <p className="text-xs md:text-sm leading-relaxed text-neutral-800 dark:text-neutral-200 font-medium">

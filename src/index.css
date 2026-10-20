@@ -27,12 +27,23 @@
   }
 }
 
-/* Стилизация Яндекс Карт в темной теме (если используется стандартный слой без native dark tiles) */
+/* Стилизация карты в темной теме (если используется стандартный слой без native dark tiles) */
 .dark .yandex-map-container:not(.satellite-active):not(.native-dark-layer) [class*="ground-pane"] {
   filter: invert(92%) hue-rotate(185deg) brightness(85%) contrast(115%) !important;
 }
 
-/* В темной теме Яндекс Карт - темные стилизованные балуны */
+/* Скрытие внешних промо-ссылок и предложений перехода на сторонние сервисы */
+[class*="ymaps-2-1-"][class*="-gotoyandex"],
+[class*="ymaps-2-1-"][class*="-gototaxi"],
+[class*="ymaps-2-1-"][class*="-gotomaps"],
+[class*="ymaps-2-1-"][class*="-map-copyrights-promo"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* В темной теме - темные стилизованные балуны */
 .dark [class*="balloon__layout"] {
   background: #1e293b !important;
   color: #f8fafc !important;

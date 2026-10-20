@@ -61,6 +61,9 @@ export const App: React.FC = () => {
     index: number;
   } | null>(null);
 
+  // Состояние сворачивания боковой панели на ПК
+  const [isDesktopCollapsed, setIsDesktopCollapsed] = useState<boolean>(false);
+
   const watchIdRef = useRef<number | null>(null);
   const isInitialLocationSetRef = useRef<boolean>(false);
 
@@ -326,10 +329,17 @@ export const App: React.FC = () => {
         onLocateUser={requestInstantLocation}
         onSelectStop={(idx) => setActiveStopIndex(idx)}
         onOpenPlaceDetails={(stop, index) => setSelectedPlaceDetails({ stop, index })}
+        isDesktopCollapsed={isDesktopCollapsed}
       />
 
       {/* 2. Верхняя плавающая панель управления и поиска */}
-      <div className="absolute top-3 inset-x-3 sm:top-4 sm:inset-x-4 max-w-4xl mx-auto flex items-center justify-between gap-2 pointer-events-none z-20">
+      <div
+        className={`absolute top-3 inset-x-3 sm:top-4 transition-all duration-300 pointer-events-none z-20 flex items-center justify-between gap-2 ${
+          isDesktopCollapsed
+            ? 'md:inset-x-6 md:max-w-5xl md:mx-auto'
+            : 'md:left-4 md:right-[460px] lg:md:right-[500px]'
+        }`}
+      >
         {/* Логотип */}
         <div className="pointer-events-auto bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center gap-2 shrink-0">
           <span className="w-2.5 h-2.5 rounded-full bg-[#FFCC00] animate-pulse" />
@@ -426,6 +436,8 @@ export const App: React.FC = () => {
         onOpenHistory={() => setIsHistoryOpen(true)}
         historyCount={history.length}
         onOpenPlaceDetails={(stop, index) => setSelectedPlaceDetails({ stop, index })}
+        isDesktopCollapsed={isDesktopCollapsed}
+        onToggleDesktopCollapse={() => setIsDesktopCollapsed((prev) => !prev)}
       />
 
       {/* 5. Модальное окно слоев карты (Схема / Спутник / Гибрид) */}

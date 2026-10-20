@@ -24,6 +24,7 @@ interface MapViewProps {
   onLocateUser?: () => void;
   onSelectStop?: (index: number) => void;
   onOpenPlaceDetails?: (stop: RouteStop, index: number) => void;
+  isDesktopCollapsed?: boolean;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -41,6 +42,7 @@ export const MapView: React.FC<MapViewProps> = ({
   onLocateUser,
   onSelectStop,
   onOpenPlaceDetails,
+  isDesktopCollapsed = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -206,7 +208,10 @@ export const MapView: React.FC<MapViewProps> = ({
   useEffect(() => {
     if (!mapInstanceRef.current || !isLoadedRef.current) return;
     updateStartMarker(mapInstanceRef.current, startLat, startLon);
-  }, [startLat, startLon]);
+    if (!routeData) {
+      mapInstanceRef.current.panTo([startLat, startLon], { duration: 600, flying: true });
+    }
+  }, [startLat, startLon, routeData]);
 
   // 4. Обновление маркера живой геолокации пользователя при изменении userLat / userLon
   useEffect(() => {
@@ -397,8 +402,14 @@ export const MapView: React.FC<MapViewProps> = ({
     >
       <div ref={containerRef} className="w-full h-full" />
 
-      {/* Плавающие кнопки управления картой (на мобильных справа, на ПК не закрываются боковой панелью) */}
-      <div className="absolute right-4 md:right-[460px] lg:md:right-[500px] top-20 z-20 flex flex-col gap-2.5 pointer-events-auto transition-all duration-300">
+      {/* Плавающие кнопки управления картой */}
+      <div
+        className={`absolute top-20 z-20 flex flex-col gap-2.5 pointer-events-auto transition-all duration-300 ${
+          isDesktopCollapsed
+            ? 'right-4 md:right-6'
+            : 'right-4 md:right-[460px] lg:md:right-[500px]'
+        }`}
+      >
         {/* Кнопка слоев карты */}
         {onToggleLayers && (
           <button

@@ -29,7 +29,7 @@ export const LayersModal: React.FC<LayersModalProps> = ({
         onClick={onClose}
       />
 
-      {/* Модальное окно в стиле Яндекс Карт */}
+      {/* Модальное окно выбора слоев карты */}
       <div className="relative w-full sm:max-w-md bg-white dark:bg-[#1e2530] rounded-t-3xl sm:rounded-3xl shadow-2xl border border-neutral-200/80 dark:border-neutral-800 z-10 overflow-hidden transform transition-all pb-6 pt-3 px-5">
         {/* Ручка перетаскивания (для мобилок) */}
         <div className="w-12 h-1 bg-neutral-300 dark:bg-neutral-600 rounded-full mx-auto mb-3 sm:hidden" />
@@ -93,7 +93,7 @@ export const LayersModal: React.FC<LayersModalProps> = ({
           </button>
         </div>
 
-        {/* Дополнительные опции в стиле Яндекс Карт */}
+        {/* Дополнительные опции */}
         <div className="mt-5 space-y-2">
           {onOpenHistory && (
             <button
