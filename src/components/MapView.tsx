@@ -5,6 +5,7 @@ import { Layers, Plus, Minus, Navigation } from 'lucide-react';
 declare global {
   interface Window {
     ymaps?: any;
+    sbsOpenStop?: (idx: number) => void;
   }
 }
 
@@ -21,6 +22,8 @@ interface MapViewProps {
   isTrackingUser?: boolean;
   onToggleLayers?: () => void;
   onLocateUser?: () => void;
+  onSelectStop?: (index: number) => void;
+  onOpenPlaceDetails?: (stop: RouteStop, index: number) => void;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -36,6 +39,8 @@ export const MapView: React.FC<MapViewProps> = ({
   isTrackingUser = false,
   onToggleLayers,
   onLocateUser,
+  onSelectStop,
+  onOpenPlaceDetails,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -44,7 +49,20 @@ export const MapView: React.FC<MapViewProps> = ({
   const routeCollectionRef = useRef<any>(null);
   const isLoadedRef = useRef<boolean>(false);
 
-  // Хелпер применения типа карты (Схема, Спутник, Гибрид, Нативная темная тема Яндекса)
+  // Глобальный хэндлер для клика по кнопке внутри балуна Яндекс Карт
+  useEffect(() => {
+    window.sbsOpenStop = (idx: number) => {
+      if (routeData && routeData.stops && routeData.stops[idx]) {
+        if (onSelectStop) onSelectStop(idx);
+        if (onOpenPlaceDetails) onOpenPlaceDetails(routeData.stops[idx], idx);
+      }
+    };
+    return () => {
+      delete window.sbsOpenStop;
+    };
+  }, [routeData, onSelectStop, onOpenPlaceDetails]);
+
+  // Хелпер применения типа карты (Схема, Спутник, Гибрид, Нативная темная тема)
   const applyMapType = (map: any, type: MapLayerType, dark: boolean) => {
     if (!map || !window.ymaps) return;
 
@@ -57,7 +75,6 @@ export const MapView: React.FC<MapViewProps> = ({
         // Режим 'map' (Схема)
         if (dark) {
           try {
-            // Проверяем / регистрируем нативный темный слой Яндекс Карт
             if (window.ymaps.layer && window.ymaps.layer.storage) {
               if (!window.ymaps.layer.storage.get('custom#dark')) {
                 window.ymaps.layer.storage.add('custom#dark', function () {
@@ -90,7 +107,7 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
-  // 1. Инициализация Яндекс Карт
+  // 1. Инициализация карты
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -101,14 +118,18 @@ export const MapView: React.FC<MapViewProps> = ({
         if (!containerRef.current) return;
 
         try {
-          const map = new window.ymaps.Map(containerRef.current, {
-            center: [startLat, startLon],
-            zoom: 14,
-            controls: [] // Минималистичный чистый вид в стиле Яндекс Go
-          }, {
-            suppressMapOpenBlock: true,
-            yandexMapDisablePoiInteractivity: false
-          });
+          const map = new window.ymaps.Map(
+            containerRef.current,
+            {
+              center: [startLat, startLon],
+              zoom: 14,
+              controls: [], // Минималистичный чистый интерфейс
+            },
+            {
+              suppressMapOpenBlock: true,
+              yandexMapDisablePoiInteractivity: false,
+            }
+          );
 
           mapInstanceRef.current = map;
 
@@ -128,7 +149,7 @@ export const MapView: React.FC<MapViewProps> = ({
             }
           });
 
-          // Создание стартового маркера
+          // Создание стартового маркера (минималистичный синий пин)
           updateStartMarker(map, startLat, startLon);
 
           // Создание маркера пользователя, если координаты уже есть
@@ -143,7 +164,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
           isLoadedRef.current = true;
         } catch (e) {
-          console.error('Yandex Maps init error:', e);
+          console.error('Map init error:', e);
         }
       });
     };
@@ -192,7 +213,7 @@ export const MapView: React.FC<MapViewProps> = ({
     if (!mapInstanceRef.current || !isLoadedRef.current) return;
     if (userLat !== null && userLon !== null) {
       updateUserMarker(mapInstanceRef.current, userLat, userLon);
-      
+
       // Если включено авто-слежение и нет активного маршрута — плавно центрируем
       if (isTrackingUser && !routeData) {
         mapInstanceRef.current.panTo([userLat, userLon], { duration: 300, flying: false });
@@ -231,13 +252,14 @@ export const MapView: React.FC<MapViewProps> = ({
         {
           hintContent: 'Точка старта прогулки',
           balloonContentHeader: '<b style="font-size:14px; color:#2b79c2">Точка старта</b>',
-          balloonContentBody: '<div style="font-size:12px; margin-top:4px; line-height:1.4">Отсюда начинается ваш пеший маршрут.<br/><span style="color:#64748b">Кликните по карте в любом месте для смены точки старта.</span></div>'
+          balloonContentBody:
+            '<div style="font-size:12px; margin-top:4px; line-height:1.4">Отсюда начинается ваш пеший маршрут.<br/><span style="color:#64748b">Кликните по карте в любом месте для смены точки старта.</span></div>',
         },
         {
           iconLayout: 'default#image',
           iconImageHref: '/start-pin.png',
           iconImageSize: [32, 49],
-          iconImageOffset: [-16, -49]
+          iconImageOffset: [-16, -49],
         }
       );
       map.geoObjects.add(startPlacemark);
@@ -254,11 +276,12 @@ export const MapView: React.FC<MapViewProps> = ({
         [lat, lon],
         {
           hintContent: 'Вы находитесь здесь (GPS)',
-          balloonContent: '<b>Ваша живая геопозиция</b><div style="font-size:11px;color:#666">Отслеживается в реальном времени</div>'
+          balloonContent:
+            '<b>Ваша геопозиция</b><div style="font-size:11px;color:#666">Отслеживается в реальном времени</div>',
         },
         {
           preset: 'islands#geolocationIcon',
-          iconColor: '#2563eb'
+          iconColor: '#2563eb',
         }
       );
       map.geoObjects.add(userPlacemark);
@@ -279,29 +302,52 @@ export const MapView: React.FC<MapViewProps> = ({
       return;
     }
 
-    // Добавляем маркеры остановок
+    // Добавляем маркеры остановок с информативным красивым балуном
     data.stops.forEach((stop: RouteStop, index: number) => {
       const isActive = activeIndex === index;
+      const rating = (stop.rating || 4.8).toFixed(1);
+
       const stopPlacemark = new window.ymaps.Placemark(
         [stop.lat, stop.lon],
         {
           iconContent: `${index + 1}`,
-          balloonContentHeader: `<b style="font-size:14px">${index + 1}. ${stop.name}</b>`,
-          balloonContentBody: `
-            <div style="font-size:12px; margin-top:4px; line-height:1.4">
-              <div style="color:#64748b; margin-bottom:2px"><b>Категория:</b> ${stop.category}</div>
-              <div style="color:#64748b; margin-bottom:4px"><b>Время в точке:</b> ${stop.spent_minutes} мин.</div>
-              <p style="margin:0; color:#1e293b">${stop.description}</p>
+          balloonContentHeader: `
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+              <b style="font-size:15px; color:#0f172a;">${index + 1}. ${stop.name}</b>
+              <span style="font-size:12px; font-weight:800; color:#eab308; white-space:nowrap;">★ ${rating}</span>
             </div>
           `,
-          hintContent: `${index + 1}. ${stop.name}`
+          balloonContentBody: `
+            <div style="font-size:12px; font-family:-apple-system,BlinkMacSystemFont,sans-serif; min-width:230px; line-height:1.4; padding-top:2px;">
+              ${
+                stop.photo_url
+                  ? `<img src="${stop.photo_url}" style="width:100%; height:110px; object-fit:cover; border-radius:10px; margin-bottom:8px; display:block;" />`
+                  : ''
+              }
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+                <span style="color:#d97706; font-weight:700; font-size:11px; text-transform:uppercase;">${stop.category}</span>
+                <span style="color:#16a34a; font-weight:600; font-size:11px;">⏱ ~${stop.spent_minutes} мин.</span>
+              </div>
+              ${stop.address ? `<div style="color:#64748b; font-size:11px; margin-bottom:4px;">📍 ${stop.address}</div>` : ''}
+              <p style="margin:0 0 10px 0; color:#334155; font-size:12px;">${stop.description}</p>
+              <button onclick="window.sbsOpenStop && window.sbsOpenStop(${index})" style="width:100%; padding:8px 0; background:#0f172a; color:#ffffff; border:none; border-radius:10px; font-size:12px; font-weight:700; cursor:pointer;">
+                Смотреть отзывы и фото →
+              </button>
+            </div>
+          `,
+          hintContent: `${index + 1}. ${stop.name}`,
         },
         {
           preset: isActive ? 'islands#redCircleIcon' : 'islands#blackCircleIcon',
           iconColor: isActive ? '#fc3f1d' : '#222222',
-          balloonCloseButton: true
+          balloonCloseButton: true,
         }
       );
+
+      stopPlacemark.events.add('click', () => {
+        if (onSelectStop) onSelectStop(index);
+        if (onOpenPlaceDetails) onOpenPlaceDetails(stop, index);
+      });
 
       collection.add(stopPlacemark);
 
@@ -317,13 +363,13 @@ export const MapView: React.FC<MapViewProps> = ({
       const polyline = new window.ymaps.Polyline(
         ymapsPoints,
         {
-          hintContent: `Пешком: ${(data.total_distance_meters / 1000).toFixed(1)} км (${data.total_walking_minutes} мин.)`
+          hintContent: `Пешком: ${(data.total_distance_meters / 1000).toFixed(1)} км (${data.total_walking_minutes} мин.)`,
         },
         {
-          strokeColor: '#fc3f1d', // Фирменный акцент Яндекс
+          strokeColor: '#fc3f1d',
           strokeWidth: 5,
           strokeOpacity: 0.9,
-          strokeStyle: 'solid'
+          strokeStyle: 'solid',
         }
       );
 
@@ -335,7 +381,7 @@ export const MapView: React.FC<MapViewProps> = ({
         map.setBounds(bounds, {
           checkZoomRange: true,
           zoomMargin: [60, 20, 260, 20],
-          duration: 500
+          duration: 500,
         });
       }
     }
@@ -344,11 +390,15 @@ export const MapView: React.FC<MapViewProps> = ({
   const isSatelliteOrHybrid = mapType === 'satellite' || mapType === 'hybrid';
 
   return (
-    <div className={`absolute inset-0 w-full h-full yandex-map-container overflow-hidden ${isSatelliteOrHybrid ? 'satellite-active' : ''} ${isDark && !isSatelliteOrHybrid ? 'native-dark-layer' : ''}`}>
+    <div
+      className={`absolute inset-0 w-full h-full yandex-map-container overflow-hidden ${
+        isSatelliteOrHybrid ? 'satellite-active' : ''
+      } ${isDark && !isSatelliteOrHybrid ? 'native-dark-layer' : ''}`}
+    >
       <div ref={containerRef} className="w-full h-full" />
 
-      {/* Плавающие кнопки управления картой справа (в стиле Яндекс Карт из скриншота) */}
-      <div className="absolute right-4 top-20 z-20 flex flex-col gap-2.5 pointer-events-auto">
+      {/* Плавающие кнопки управления картой (на мобильных справа, на ПК не закрываются боковой панелью) */}
+      <div className="absolute right-4 md:right-[460px] lg:md:right-[500px] top-20 z-20 flex flex-col gap-2.5 pointer-events-auto transition-all duration-300">
         {/* Кнопка слоев карты */}
         {onToggleLayers && (
           <button

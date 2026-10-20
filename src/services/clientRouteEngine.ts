@@ -1,4 +1,5 @@
 import type { RouteRequest, RouteResponse, RouteStop } from '../types';
+import { fetchRealPlacesAround, enrichStopWithRealDetails, type RealPOICandidate } from './realPlacesService';
 
 const OVERPASS_URLS = [
   'https://lz4.overpass-api.de/api/interpreter',
@@ -290,109 +291,28 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
   const radius = Math.min(1100, Math.max(450, Math.round(350 + Math.sqrt(duration_minutes) * 65)));
   const targetStopCount = calculateStopCount(duration_minutes, stop_count);
 
-  // Формируем динамический Overpass QL
-  const filters = parseKeywordsToOsmFilters(custom_prompt, activities);
-  const filterQueries = filters.map((f) => `${f}(around:${radius},${start_lat},${start_lon});`).join('\n');
+  // 1. Поиск РЕАЛЬНЫХ мест (заведений, парков, скверов) вокруг точки старта
+  let realPlaces = await fetchRealPlacesAround(start_lat, start_lon, radius, activities);
 
-  const query = `
-    [out:json][timeout:8];
-    (
-      ${filterQueries}
-    );
-    out center tags 60;
-  `;
-
-  let rawPois: any[] = [];
-  for (const url of OVERPASS_URLS) {
-    try {
-      const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 3500);
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'StepByStepAI/2.0 (route-planner)',
-        },
-        body: `data=${encodeURIComponent(query)}`,
-        signal: controller.signal,
-      });
-      clearTimeout(tId);
-
-      if (resp.ok) {
-        const json = await resp.json();
-        if (json.elements && json.elements.length > 0) {
-          rawPois = json.elements.filter((e: any) => e.tags && (e.tags.name || e.tags['name:ru'] || e.tags['name:en']));
-          if (rawPois.length > 0) break;
-        }
-      }
-    } catch {
-      // try next mirror
+  // Если нашлось мало мест, расширяем радиус поиска
+  if (realPlaces.length < targetStopCount + 2) {
+    const widerPlaces = await fetchRealPlacesAround(start_lat, start_lon, radius * 1.6, activities);
+    if (widerPlaces.length > realPlaces.length) {
+      realPlaces = widerPlaces;
     }
   }
 
-  // Очистка и фильтрация POI
-  const seenNames = new Set<string>();
-  const parsedPois: { id: string; name: string; cat: string; lat: number; lon: number; dist: number; angle: number }[] = [];
-
-  for (const p of rawPois) {
-    const name = (p.tags.name || p.tags['name:ru'] || p.tags['name:en']).trim();
-    if (name.length < 2 || seenNames.has(name.toLowerCase())) continue;
-    seenNames.add(name.toLowerCase());
-
-    const lat = p.lat || p.center?.lat;
-    const lon = p.lon || p.center?.lon;
-    if (!lat || !lon) continue;
-
-    const dist = getDistance(start_lat, start_lon, lat, lon);
-    // Исключаем точки в радиусе ближе 40 метров от старта
-    if (dist < 40) continue;
-
-    const angle = Math.atan2(lon - start_lon, lat - start_lat);
-    parsedPois.push({
-      id: `${p.type || 'node'}_${p.id}`,
-      name,
-      cat: getReadableCategory(p.tags),
-      lat,
-      lon,
-      dist,
-      angle,
-    });
-  }
-
-  // Если в районе мало POI в OSM, дополняем реальными уютными ориентирами в шаговой доступности
-  if (parsedPois.length < targetStopCount + 2) {
-    const fallbackTemplates = [
-      { name: 'Уютная кофейня с диванчиками', cat: 'Кофейня' },
-      { name: 'Тенистая аллея и скамейки в сквере', cat: 'Парк / Сквер' },
-      { name: 'Видовая смотровая терраса', cat: 'Смотровая площадка' },
-      { name: 'Тихий исторический дворик', cat: 'Историческое место' },
-      { name: 'Атмосферная книжная лавка', cat: 'Книжная лавка' },
-      { name: 'Пекарня со свежей выпечкой', cat: 'Пекарня / Десерты' },
-    ];
-    const angleStep = (2 * Math.PI) / Math.max(3, targetStopCount);
-    for (let i = 0; i < 5; i++) {
-      const tmpl = fallbackTemplates[i % fallbackTemplates.length];
-      const ang = i * angleStep + (Math.random() * 0.3 - 0.15);
-      const dist = Math.min(radius * 0.65, 300 + i * 180);
-      const dlat = (dist * Math.cos(ang)) / 111000;
-      const dlon = (dist * Math.sin(ang)) / (111000 * Math.cos((start_lat * Math.PI) / 180));
-      parsedPois.push({
-        id: `poi_loc_${i}`,
-        name: tmpl.name,
-        cat: tmpl.cat,
-        lat: Number((start_lat + dlat).toFixed(6)),
-        lon: Number((start_lon + dlon).toFixed(6)),
-        dist,
-        angle: ang,
-      });
-    }
-  }
+  // Преобразуем реальные заведения в кандидаты с расчетом угла и координат
+  const parsedPois: (RealPOICandidate & { angle: number })[] = realPlaces.map((p) => ({
+    ...p,
+    angle: Math.atan2(p.lon - start_lon, p.lat - start_lat),
+  }));
 
   // Перемешиваем пул кандидатов перед передачей AI
   parsedPois.sort(() => Math.random() - 0.5);
 
   const poiMap = new Map(parsedPois.map((p) => [p.id, p]));
-  let selectedStops: { name: string; cat: string; lat: number; lon: number; spent: number; desc: string }[] = [];
+  let selectedStops: RouteStop[] = [];
   let aiThought: string | undefined;
   let customTitle: string | undefined;
   let usedModelName = 'Google Gemini 2.5 Flash';
@@ -424,18 +344,27 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
       const match = poiMap.get(stop.id);
       if (match) {
         selectedStops.push({
+          id: match.id,
           name: match.name,
-          cat: match.cat,
+          category: match.cat,
           lat: match.lat,
           lon: match.lon,
-          spent: Math.max(15, stop.spent_minutes || defaultSpentPerStop),
-          desc: stop.description || `${match.name} (${match.cat}) — прекрасное место, чтобы неспешно провести время.`,
+          spent_minutes: Math.max(15, stop.spent_minutes || defaultSpentPerStop),
+          description: stop.description || `${match.name} (${match.cat}) — прекрасное место для отдыха и приятного разговора.`,
+          order: 0,
+          address: match.address,
+          photo_url: match.photo_url,
+          rating: match.rating,
+          reviews_count: match.reviews_count,
+          opening_hours: match.opening_hours,
+          tags: match.tags,
+          reviews: match.reviews,
         });
       }
     }
   }
 
-  // 2. Если нейросеть вернула меньше точек (например при сбое сети), дополняем с комфортным таймингом
+  // 2. Если нейросеть вернула меньше точек (например при сбое сети), дополняем из реальных заведений
   if (selectedStops.length < targetStopCount) {
     const existingNames = new Set(selectedStops.map((s) => s.name));
     const remaining = parsedPois.filter((p) => !existingNames.has(p.name));
@@ -449,12 +378,21 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
         desc = `${item.name} отлично подходит под ваше пожелание «${custom_prompt.slice(0, 40)}».`;
       }
       selectedStops.push({
+        id: item.id,
         name: item.name,
-        cat: item.cat,
+        category: item.cat,
         lat: item.lat,
         lon: item.lon,
-        spent: defaultSpentPerStop,
-        desc,
+        spent_minutes: defaultSpentPerStop,
+        description: desc,
+        order: 0,
+        address: item.address,
+        photo_url: item.photo_url,
+        rating: item.rating,
+        reviews_count: item.reviews_count,
+        opening_hours: item.opening_hours,
+        tags: item.tags,
+        reviews: item.reviews,
       });
     }
 
@@ -463,16 +401,16 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     }
   }
 
-  // Превращаем в итоговый массив остановок
-  const finalStops: RouteStop[] = selectedStops.map((s, idx) => ({
-    name: s.name,
-    category: s.cat,
-    lat: s.lat,
-    lon: s.lon,
-    spent_minutes: s.spent,
-    description: s.desc,
-    order: idx + 1,
-  }));
+  // Превращаем в итоговый массив остановок с полным обогащением (фото, рейтинг, отзывы, адрес)
+  const finalStops: RouteStop[] = selectedStops.map((s, idx) =>
+    enrichStopWithRealDetails(
+      {
+        ...s,
+        order: idx + 1,
+      },
+      idx
+    )
+  );
 
   // Строим пешеходный трек по реальным улицам через публичный HTTPS OSRM
   const coords: [number, number][] = [[start_lon, start_lat]];

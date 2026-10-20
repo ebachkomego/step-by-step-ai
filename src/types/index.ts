@@ -12,7 +12,17 @@ export interface RouteRequest {
   api_key?: string;
 }
 
+export interface PlaceReview {
+  id: string;
+  author: string;
+  rating: number;
+  date: string;
+  text: string;
+  avatar?: string;
+}
+
 export interface RouteStop {
+  id?: string;
   name: string;
   category: string;
   lat: number;
@@ -20,6 +30,13 @@ export interface RouteStop {
   spent_minutes: number;
   description: string;
   order: number;
+  address?: string;
+  rating?: number;
+  reviews_count?: number;
+  photo_url?: string;
+  opening_hours?: string;
+  tags?: string[];
+  reviews?: PlaceReview[];
 }
 
 export interface RouteResponse {

@@ -3,7 +3,9 @@ import { MapView } from './components/MapView';
 import { BottomSheet } from './components/BottomSheet';
 import { LayersModal } from './components/LayersModal';
 import { HistoryModal } from './components/HistoryModal';
-import type { RouteRequest, RouteResponse, MapLayerType, RouteHistoryItem } from './types';
+import { CitySearchBar } from './components/CitySearchBar';
+import { PlaceDetailsModal } from './components/PlaceDetailsModal';
+import type { RouteRequest, RouteResponse, MapLayerType, RouteHistoryItem, RouteStop } from './types';
 import { Sun, Moon, Navigation, AlertCircle, History, Layers } from 'lucide-react';
 import { generateRouteClientFallback } from './services/clientRouteEngine';
 
@@ -52,6 +54,12 @@ export const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeStopIndex, setActiveStopIndex] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Выбранная карточка места для детального просмотра с фото и отзывами
+  const [selectedPlaceDetails, setSelectedPlaceDetails] = useState<{
+    stop: RouteStop;
+    index: number;
+  } | null>(null);
 
   const watchIdRef = useRef<number | null>(null);
   const isInitialLocationSetRef = useRef<boolean>(false);
@@ -124,6 +132,16 @@ export const App: React.FC = () => {
     setStartLat(lat);
     setStartLon(lon);
     setIsTrackingUser(false);
+    setErrorMessage(null);
+  };
+
+  // Выбор точки через строку поиска городов и мест
+  const handleSelectSearchLocation = (lat: number, lon: number) => {
+    setStartLat(lat);
+    setStartLon(lon);
+    setIsTrackingUser(false);
+    setRouteData(null);
+    setActiveStopIndex(null);
     setErrorMessage(null);
   };
 
@@ -292,7 +310,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-neutral-100 dark:bg-neutral-950 font-sans">
-      {/* 1. Интерактивная карта Яндекс (на весь экран) */}
+      {/* 1. Интерактивная карта (на весь экран) */}
       <MapView
         startLat={startLat}
         startLon={startLon}
@@ -306,20 +324,27 @@ export const App: React.FC = () => {
         isTrackingUser={isTrackingUser}
         onToggleLayers={() => setIsLayersOpen(true)}
         onLocateUser={requestInstantLocation}
+        onSelectStop={(idx) => setActiveStopIndex(idx)}
+        onOpenPlaceDetails={(stop, index) => setSelectedPlaceDetails({ stop, index })}
       />
 
-      {/* 2. Верхняя плавающая панель управления (в стиле Яндекс Карт / Такси) */}
-      <div className="absolute top-4 inset-x-4 max-w-xl mx-auto flex items-center justify-between pointer-events-none z-20">
+      {/* 2. Верхняя плавающая панель управления и поиска */}
+      <div className="absolute top-3 inset-x-3 sm:top-4 sm:inset-x-4 max-w-4xl mx-auto flex items-center justify-between gap-2 pointer-events-none z-20">
         {/* Логотип */}
-        <div className="pointer-events-auto bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md px-4 py-2 rounded-2xl shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center gap-2">
+        <div className="pointer-events-auto bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center gap-2 shrink-0">
           <span className="w-2.5 h-2.5 rounded-full bg-[#FFCC00] animate-pulse" />
           <span className="font-extrabold text-sm tracking-tight text-neutral-900 dark:text-white">
             StepByStep
           </span>
         </div>
 
+        {/* Поиск городов и мест (между названием и историей) */}
+        <div className="pointer-events-auto flex-1 max-w-md min-w-0">
+          <CitySearchBar onSelectLocation={handleSelectSearchLocation} />
+        </div>
+
         {/* Кнопки переключения темы, слоев, истории и геолокации */}
-        <div className="pointer-events-auto flex items-center gap-2">
+        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Кнопка "История прогулок" */}
           <button
             type="button"
@@ -386,7 +411,7 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* 4. Нижняя шторка (Bottom Sheet) в стиле Яндекс Go */}
+      {/* 4. Боковая панель на ПК / Нижняя шторка на мобильных устройствах */}
       <BottomSheet
         startLat={startLat}
         startLon={startLon}
@@ -400,6 +425,7 @@ export const App: React.FC = () => {
         onToggleTracking={handleToggleTracking}
         onOpenHistory={() => setIsHistoryOpen(true)}
         historyCount={history.length}
+        onOpenPlaceDetails={(stop, index) => setSelectedPlaceDetails({ stop, index })}
       />
 
       {/* 5. Модальное окно слоев карты (Схема / Спутник / Гибрид) */}
@@ -420,6 +446,13 @@ export const App: React.FC = () => {
         onSelectRoute={handleSelectHistoryRoute}
         onDeleteRoute={handleDeleteHistoryRoute}
         onClearHistory={handleClearHistory}
+      />
+
+      {/* 7. Детальная карточка места с фото, рейтингом и отзывами */}
+      <PlaceDetailsModal
+        stop={selectedPlaceDetails?.stop || null}
+        stopIndex={selectedPlaceDetails?.index}
+        onClose={() => setSelectedPlaceDetails(null)}
       />
     </div>
   );
