@@ -45,6 +45,7 @@ export interface RouteStop {
   rating?: number;
   reviews_count?: number;
   photo_url?: string;
+  satellite_url?: string;
   opening_hours?: string;
   tags?: string[];
   reviews?: PlaceReview[];

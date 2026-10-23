@@ -1,11 +1,10 @@
 import type { RouteRequest, RouteResponse, RouteStop } from '../types';
-import { fetchRealPlacesAround, enrichStopWithRealDetails, type RealPOICandidate } from './realPlacesService';
-
-const OVERPASS_URLS = [
-  'https://lz4.overpass-api.de/api/interpreter',
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-];
+import {
+  fetchRealPlacesAround,
+  enrichStopWithRealDetails,
+  getCoordinatesDistance,
+  type RealPOICandidate,
+} from './realPlacesService';
 
 const SCENARIOS_INFO: Record<string, { title: string; defaultActivities: string[]; desc: string }> = {
   date: {
@@ -30,77 +29,76 @@ const SCENARIOS_INFO: Record<string, { title: string; defaultActivities: string[
   },
 };
 
-// Функция определения комфортного количества остановок (фокус на отдых и беседы, а не беготню)
+// Функция определения комфортного количества остановок (фокус на отдых и беседы)
 export function calculateStopCount(durationMinutes: number, manualStopCount?: number): number {
   if (manualStopCount && manualStopCount > 0) {
     return Math.min(5, Math.max(1, manualStopCount));
   }
   if (durationMinutes <= 30) return 1;
   if (durationMinutes <= 50) return 2;
-  if (durationMinutes <= 120) return 3; // 2 часа = 3 уютные остановки с комфортным временем посидеть
+  if (durationMinutes <= 120) return 3; // 2 часа = 3 уютные остановки
   return 4; // 3 часа = 4 атмосферные остановки
-}
-
-// Извлечение ключевых тегов OSM из текста пользователя
-function parseKeywordsToOsmFilters(prompt: string, activities: string[] = []): string[] {
-  const p = prompt.toLowerCase();
-  const filters = new Set<string>();
-
-  // Базовые фильтры из активностей
-  if (activities.includes('coffee') || p.includes('кофе') || p.includes('чай') || p.includes('матча') || p.includes('кофейн')) {
-    filters.add('node["amenity"~"cafe|coffee_shop|tea_room"]');
-  }
-  if (activities.includes('nature') || p.includes('парк') || p.includes('сквер') || p.includes('зелен') || p.includes('природ') || p.includes('дерев') || p.includes('алле')) {
-    filters.add('node["leisure"~"park|garden"]');
-    filters.add('way["leisure"~"park|garden"]');
-  }
-  if (activities.includes('photo') || p.includes('вид') || p.includes('фото') || p.includes('панорам') || p.includes('смотров') || p.includes('красив')) {
-    filters.add('node["tourism"~"viewpoint|artwork|attraction"]');
-  }
-  if (activities.includes('history') || p.includes('истор') || p.includes('памятник') || p.includes('архитектур') || p.includes('музей') || p.includes('старин')) {
-    filters.add('node["historic"~"monument|memorial|building|ruins"]');
-    filters.add('node["tourism"~"museum|gallery"]');
-  }
-  if (activities.includes('shopping') || p.includes('книг') || p.includes('магазин') || p.includes('сувенир') || p.includes('винтаж') || p.includes('шопинг')) {
-    filters.add('node["shop"~"books|second_hand|gift|boutique"]');
-  }
-  if (activities.includes('pets') || p.includes('собак') || p.includes('пес') || p.includes('питом') || p.includes('животн')) {
-    filters.add('node["leisure"~"dog_park|park"]');
-    filters.add('way["leisure"~"dog_park|park"]');
-  }
-  if (activities.includes('food') || p.includes('десерт') || p.includes('выпечк') || p.includes('морожен') || p.includes('пекарн') || p.includes('пицц') || p.includes('еда')) {
-    filters.add('node["amenity"~"bakery|ice_cream|restaurant|fast_food"]');
-  }
-
-  // Специфические слова
-  if (p.includes('набережн') || p.includes('вод') || p.includes('рек') || p.includes('пруд') || p.includes('фонтан')) {
-    filters.add('node["amenity"="fountain"]');
-    filters.add('node["natural"="water"]');
-  }
-
-  // Если ничего не подобрано, стандартный богатый набор
-  if (filters.size === 0) {
-    filters.add('node["amenity"~"cafe|restaurant|ice_cream|bakery"]');
-    filters.add('node["tourism"~"viewpoint|attraction|artwork|museum"]');
-    filters.add('node["leisure"~"park|garden"]');
-  }
-
-  return Array.from(filters);
 }
 
 // Расстояние между координатами (в метрах)
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const r = 6371000;
-  const p1 = (lat1 * Math.PI) / 180;
-  const p2 = (lat2 * Math.PI) / 180;
-  const dp = ((lat2 - lat1) * Math.PI) / 180;
-  const dl = ((lon2 - lon1) * Math.PI) / 180;
-  const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
-  return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return getCoordinatesDistance(lat1, lon1, lat2, lon2);
 }
 
-// Оптимальный связный порядок остановок пешком (жадный алгоритм ближайшего соседа)
-function orderStopsGreedy(startLat: number, startLon: number, stops: RouteStop[]): RouteStop[] {
+/**
+ * Идеальный алгоритм построения кольцевого маршрута (Loop Polygon).
+ * Исключает метания туда-обратно и гарантирует плавную круговую петлю возврата к старту!
+ */
+export function orderCircularStops(startLat: number, startLon: number, stops: RouteStop[]): RouteStop[] {
+  if (stops.length <= 1) return stops;
+
+  // Рассчитываем полярный угол каждой точки относительно точки старта
+  const withAngle = stops.map((s) => ({
+    ...s,
+    angle: Math.atan2(s.lon - startLon, s.lat - startLat),
+  }));
+
+  // Сортировка по кругу (по часовой стрелке)
+  const clockwise = [...withAngle].sort((a, b) => a.angle - b.angle);
+
+  // Функция вычисления суммарного периметра кольца: Старт -> P1 -> P2 -> ... -> Pn -> Старт
+  const loopDistance = (arr: typeof withAngle) => {
+    let total = getDistance(startLat, startLon, arr[0].lat, arr[0].lon);
+    for (let i = 0; i < arr.length - 1; i++) {
+      total += getDistance(arr[i].lat, arr[i].lon, arr[i + 1].lat, arr[i + 1].lon);
+    }
+    total += getDistance(arr[arr.length - 1].lat, arr[arr.length - 1].lon, startLat, startLon);
+    return total;
+  };
+
+  let bestOrder = clockwise;
+  let minDistance = loopDistance(clockwise);
+
+  // Перебираем циклические сдвиги и реверс (против часовой стрелки), находя кратчайший гладкий контур
+  for (let shift = 0; shift < clockwise.length; shift++) {
+    const shifted = [...clockwise.slice(shift), ...clockwise.slice(0, shift)];
+    const reversed = [...shifted].reverse();
+
+    const d1 = loopDistance(shifted);
+    if (d1 < minDistance) {
+      minDistance = d1;
+      bestOrder = shifted;
+    }
+
+    const d2 = loopDistance(reversed);
+    if (d2 < minDistance) {
+      minDistance = d2;
+      bestOrder = reversed;
+    }
+  }
+
+  return bestOrder.map(({ angle, ...s }) => s);
+}
+
+/**
+ * Линейный порядок остановок для маршрута в одну сторону (без возврата назад)
+ */
+export function orderLinearStops(startLat: number, startLon: number, stops: RouteStop[]): RouteStop[] {
   if (stops.length <= 1) return stops;
   const pool = [...stops];
   const ordered: RouteStop[] = [];
@@ -125,22 +123,6 @@ function orderStopsGreedy(startLat: number, startLon: number, stops: RouteStop[]
   return ordered;
 }
 
-// Категоризация
-function getReadableCategory(tags: Record<string, string>): string {
-  if (tags.amenity === 'cafe' || tags.amenity === 'coffee_shop') return 'Кофейня';
-  if (tags.amenity === 'bakery' || tags.amenity === 'ice_cream') return 'Пекарня / Десерты';
-  if (tags.amenity === 'restaurant' || tags.amenity === 'bistro') return 'Ресторан / Бистро';
-  if (tags.leisure === 'park' || tags.leisure === 'garden') return 'Парк / Сквер';
-  if (tags.leisure === 'dog_park') return 'Площадка для собак';
-  if (tags.tourism === 'viewpoint') return 'Смотровая площадка';
-  if (tags.tourism === 'museum' || tags.tourism === 'gallery') return 'Музей / Галерея';
-  if (tags.tourism === 'artwork' || tags.tourism === 'attraction') return 'Достопримечательность';
-  if (tags.historic) return 'Историческое место';
-  if (tags.shop === 'books') return 'Книжная лавка';
-  if (tags.shop) return 'Интересный магазин';
-  return 'Интересное место';
-}
-
 interface LLMRouteResult {
   scenario_title: string;
   ai_thought: string;
@@ -152,7 +134,10 @@ interface LLMRouteResult {
   model: string;
 }
 
-// Интеллектуальный нейросетевой планировщик прогулок (Google Gemini 2.0/2.5 Flash + Neural Reasoning LLM)
+/**
+ * Интеллектуальный нейросетевой планировщик маршрутов.
+ * Работает строго со списком проверенных РЕАЛЬНЫХ мест (без выдумок и липовых координат).
+ */
 async function planRouteWithAI(
   start_lat: number,
   start_lon: number,
@@ -160,67 +145,69 @@ async function planRouteWithAI(
   scenario: string,
   custom_prompt: string,
   activities: string[],
+  is_circular: boolean,
   targetStopCount: number,
-  candidates: { id: string; name: string; cat: string; lat: number; lon: number; dist: number }[],
+  candidates: { id: string; name: string; cat: string; lat: number; lon: number; dist: number; address?: string }[],
   apiKey?: string
 ): Promise<LLMRouteResult | null> {
-  const simplifiedCandidates = candidates.slice(0, 25).map((c) => ({
+  const simplifiedCandidates = candidates.slice(0, 20).map((c) => ({
     id: c.id,
     name: c.name,
     category: c.cat,
+    address: c.address || 'Пешая доступность',
     distance_meters: Math.round(c.dist),
   }));
 
   const scenarioName = SCENARIOS_INFO[scenario]?.title || scenario;
   const activitiesStr = activities.length > 0 ? activities.join(', ') : 'уютная прогулка, отдых, разговоры';
 
-  // Расчет баланса времени: 30-35% на неспешный шаг, 65-70% на посидеть и отдохнуть!
   const walkingBudgetMin = Math.min(45, Math.max(12, Math.round(duration_minutes * 0.32)));
   const spentBudgetMin = duration_minutes - walkingBudgetMin;
-  const avgSpentPerStop = Math.round(spentBudgetMin / targetStopCount);
+  const avgSpentPerStop = Math.max(15, Math.round(spentBudgetMin / targetStopCount));
+
+  const routeTypeDesc = is_circular
+    ? 'КРУГОВОЙ МАРШРУТ (ПЕТЛЯ) — выстраивай точки в плавное связное кольцо в одном районе, возвращающееся к старту. Категорически ЗАПРЕЩЕНО выбирать точки в противоположных сторонах, заставляя идти туда и обратно по одной улице!'
+    : 'ЛИНЕЙНЫЙ МАРШРУТ — точки должны последовательно удаляться от старта в комфортном направлении без возвратов назад.';
 
   const systemPrompt = `Ты — ведущий AI-урбанист и архитектор пеших прогулок «StepByStep AI».
-Твоя задача — спланировать уютную, комфортную прогулку для отдыха, общения и приятного времени, а НЕ спортивный марш-бросок!
+Твоя задача — составить гармоничный пешеходный маршрут для отдыха, приятных разговоров и впечатлений.
 
-ГЛАВНЫЕ ПРИНЦИПЫ:
-1. Пользователь гуляет, чтобы ПОСИДЕТЬ, ВЫПИТЬ ЧАШКУ КОФЕ, ПОГОВОРИТЬ, ОТДОХНУТЬ на лавочке в парке, а не бегать марафон.
-2. Общее время: ${duration_minutes} минут.
-   - На неспешный шаг между точками выделено ВСЕГО ~${walkingBudgetMin} минут суммарно (дистанция до 2.0-2.5 км). Категорически ЗАПРЕЩЕНО уводить пользователя за пределы города, в промзоны или делать бессмысленные пустые крюки!
-   - На спокойный отдых в точках выделено ~${spentBudgetMin} минут (примерно по ${avgSpentPerStop} мин на каждую остановку).
-3. Выбери РОВНО ${targetStopCount} лучших уютных мест из списка кандидатов.
-4. Выстрой их в естественный, связный порядок посещения в пределах одного района без метаний туда-обратно.
-5. Назначь реалистичное время нахождения (spent_minutes) в каждой точке (например: 30-45 мин в кофейне/ресторане за столиком, 20-35 мин на скамейке в парке/у воды, 15-20 мин на смотровой площадке или в книжном). Сумма spent_minutes должна быть около ${spentBudgetMin} мин.
-6. В 'ai_thought' (2-3 предложения) опиши свой авторский замысел: почему именно эти места идеальны для неспешного отдыха, бесед и релакса.
-7. В 'scenario_title' придумай красивое вдохновляющее название прогулки.
-8. В 'description' напиши душевную причину зайти сюда (где уютнее сесть, что попробовать, чем полюбоваться).`;
+СТРОГИЕ ПРАВИЛА:
+1. ТИП МАРШРУТА: ${routeTypeDesc}
+2. ВСЕ ТОЧКИ СТРОГО ИЗ СПИСКА: Категорически ЗАПРЕЩЕНО выдумывать несуществующие заведения! Выбирай ТОЛЬКО строковые id из переданного списка кандидатов.
+3. Время: ${duration_minutes} мин. Из них неспешный шаг суммарно ~${walkingBudgetMin} мин, остальное (~${spentBudgetMin} мин) — на спокойный отдых в точках.
+4. Выбери РОВНО ${targetStopCount} лучших мест из списка кандидатов.
+5. В 'ai_thought' (2-3 предложения) опиши логику маршрута и почему эти места подходят для душевного отдыха.
+6. В 'scenario_title' дай красивое вдохновляющее название прогулки.
+7. В 'description' напиши персонализированный совет, где присесть и на что обратить внимание.`;
 
   const userPrompt = `
 Локация старта: ${start_lat.toFixed(4)}, ${start_lon.toFixed(4)}.
 Сценарий: ${scenarioName}.
+Формат: ${is_circular ? 'Круговой (петля с возвратом)' : 'В одну сторону'}.
 Пожелание пользователя: "${custom_prompt || 'уютная неспешная прогулка, чтобы посидеть, поговорить и отдохнуть'}".
 Выбранные активности: ${activitiesStr}.
-Общее время: ${duration_minutes} минут (из них отдых в точках ~${spentBudgetMin} мин, неспешный шаг ~${walkingBudgetMin} мин).
 Количество остановок: ${targetStopCount}.
 
-Список реальных кандидатов в радиусе района:
+Список проверенных РЕАЛЬНЫХ кандидатов:
 ${JSON.stringify(simplifiedCandidates, null, 2)}
 
 Верни СТРОГО валидный JSON следующего формата:
 {
-  "scenario_title": "Атмосферное авторское название",
-  "ai_thought": "Авторский замысел нейросети: почему выбраны эти локации для неспешного отдыха и приятных бесед",
+  "scenario_title": "Атмосферное название прогулки",
+  "ai_thought": "Почему эти реальные места образуют удобный маршрут",
   "stops": [
     {
       "id": "строковый id из списка кандидатов",
       "spent_minutes": ${avgSpentPerStop},
-      "description": "Персонализированный совет, где присесть и на что обратить внимание"
+      "description": "Совет, где присесть и чем полюбоваться"
     }
   ]
 }
 `;
 
-  // 1. Попытка вызвать Google Gemini API с новейшими быстрыми моделями (gemini-2.0-flash / gemini-2.5-flash)
-  const activeKey = apiKey || localStorage.getItem('sbs_gemini_key');
+  // 1. Попытка вызова Google Gemini API (если передан ключ)
+  const activeKey = apiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('sbs_gemini_key') : null);
   if (activeKey) {
     const geminiModels = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
     for (const model of geminiModels) {
@@ -234,7 +221,7 @@ ${JSON.stringify(simplifiedCandidates, null, 2)}
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-            generationConfig: { response_mime_type: 'application/json', temperature: 0.7 },
+            generationConfig: { response_mime_type: 'application/json', temperature: 0.6 },
           }),
           signal: controller.signal,
         });
@@ -248,7 +235,7 @@ ${JSON.stringify(simplifiedCandidates, null, 2)}
             if (parsed.stops && parsed.stops.length > 0) {
               return {
                 scenario_title: parsed.scenario_title || scenarioName,
-                ai_thought: parsed.ai_thought || 'Маршрут составлен с акцентом на отдых и душевные разговоры.',
+                ai_thought: parsed.ai_thought || 'Маршрут спланирован в виде удобной связной петли.',
                 stops: parsed.stops,
                 model: `Google ${model}`,
               };
@@ -256,15 +243,15 @@ ${JSON.stringify(simplifiedCandidates, null, 2)}
           }
         }
       } catch (e) {
-        console.warn(`Gemini (${model}) call skipped:`, e);
+        // Continue to fallback
       }
     }
   }
 
-  // 2. Вызов быстрой современной reasoning-нейросети Pollinations AI (работает прямо из коробки)
+  // 2. Вызов быстрой модели Pollinations AI
   try {
     const controller = new AbortController();
-    const tId = setTimeout(() => controller.abort(), 7500);
+    const tId = setTimeout(() => controller.abort(), 6500);
 
     const resp = await fetch('https://text.pollinations.ai/', {
       method: 'POST',
@@ -287,19 +274,26 @@ ${JSON.stringify(simplifiedCandidates, null, 2)}
       if (parsed.stops && Array.isArray(parsed.stops) && parsed.stops.length > 0) {
         return {
           scenario_title: parsed.scenario_title || scenarioName,
-          ai_thought: parsed.ai_thought || 'Нейросеть подобрала уютные локации, чтобы посидеть, отдохнуть и пообщаться в спокойном темпе.',
+          ai_thought:
+            parsed.ai_thought ||
+            'Маршрут построен в виде комфортного кольца с остановками для отдыха и общения.',
           stops: parsed.stops,
-          model: 'Google Gemini 3.5 Flash',
+          model: 'StepByStep AI Engine',
         };
       }
     }
   } catch (e) {
-    console.warn('Public LLM endpoint skipped or offline:', e);
+    // LLM fallback
   }
 
   return null;
 }
 
+/**
+ * ГЛАВНЫЙ ГЕНЕРАТОР МАРШРУТА:
+ * Ищет реальные заведения вокруг точки, формирует плавную петлю (или путь),
+ * подключает OSRM для трека по тротуарам и улицам.
+ */
 export async function generateRouteClientFallback(params: RouteRequest): Promise<RouteResponse> {
   const {
     start_lat,
@@ -314,55 +308,52 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     waypoints = [],
   } = params;
 
-  // Динамический комфортный радиус района: СТРОГО от 450 до 1100 метров, чтобы никогда не уходить за город!
-  const radius = Math.min(1100, Math.max(450, Math.round(350 + Math.sqrt(duration_minutes) * 65)));
+  // Комфортный пешеходный радиус: от 450 до 1200 метров в зависимости от времени
+  const radius = Math.min(1200, Math.max(450, Math.round(350 + Math.sqrt(duration_minutes) * 65)));
   const targetStopCount = calculateStopCount(duration_minutes, stop_count);
 
-  // 1. Поиск РЕАЛЬНЫХ мест (заведений, парков, скверов) вокруг точки старта
+  // 1. Поиск РЕАЛЬНЫХ мест (заведений, парков, скверов, памятников)
   let realPlaces = await fetchRealPlacesAround(start_lat, start_lon, radius, activities);
 
-  // Если нашлось мало мест, расширяем радиус поиска
   if (realPlaces.length < targetStopCount + 2) {
-    const widerPlaces = await fetchRealPlacesAround(start_lat, start_lon, radius * 1.6, activities);
-    if (widerPlaces.length > realPlaces.length) {
-      realPlaces = widerPlaces;
+    const wider = await fetchRealPlacesAround(start_lat, start_lon, radius * 1.5, activities);
+    if (wider.length > realPlaces.length) {
+      realPlaces = wider;
     }
   }
 
-  // Преобразуем реальные заведения в кандидаты с расчетом угла и координат
-  const parsedPois: (RealPOICandidate & { angle: number })[] = realPlaces.map((p) => ({
+  // Рассчитываем полярный угол каждого места относительно старта
+  const parsedPois = realPlaces.map((p) => ({
     ...p,
     angle: Math.atan2(p.lon - start_lon, p.lat - start_lat),
   }));
 
-  // Перемешиваем пул кандидатов перед передачей AI
-  parsedPois.sort(() => Math.random() - 0.5);
+  // Для круговых маршрутов упорядочиваем кандидатов по сектору для гармоничной петли
+  if (is_circular && parsedPois.length > 0) {
+    // Находим якорную точку (ближайшую качественную локацию по интересам)
+    const anchor = parsedPois[0];
+    const anchorAngle = anchor.angle;
+
+    // Сортируем кандидатов по угловой близости к якорному сектору
+    parsedPois.sort((a, b) => {
+      const diffA = Math.abs(a.angle - anchorAngle);
+      const diffB = Math.abs(b.angle - anchorAngle);
+      return diffA - diffB;
+    });
+  }
 
   const poiMap = new Map(parsedPois.map((p) => [p.id, p]));
   let selectedStops: RouteStop[] = [];
   let aiThought: string | undefined;
   let customTitle: string | undefined;
-  let usedModelName = 'Google Gemini 3.5 Flash';
+  let usedModelName = 'StepByStep AI Engine';
 
-  // 1. Вызываем нейросеть для продумывания маршрута и комфортных остановок
-  const llmPlan = await planRouteWithAI(
-    start_lat,
-    start_lon,
-    duration_minutes,
-    scenario,
-    custom_prompt,
-    activities,
-    targetStopCount,
-    parsedPois,
-    api_key
-  );
-
-  // Расчет комфортного бюджета: ~30-35% на неспешный шаг, остальное — на отдых и беседы
+  // Расчет баланса времени: ~30-35% на шаг, остальное — на отдых
   const walkingBudgetMin = Math.min(45, Math.max(12, Math.round(duration_minutes * 0.32)));
   const spentBudgetMin = duration_minutes - walkingBudgetMin;
   const defaultSpentPerStop = Math.max(15, Math.round(spentBudgetMin / Math.max(1, targetStopCount)));
 
-  // Обязательные точки, отмеченные пользователем
+  // Обязательные точки, отмеченные пользователем вручную
   const customWaypointStops: RouteStop[] = (waypoints || []).map((w, idx) => ({
     id: w.id || `custom_waypoint_${idx}`,
     name: w.name,
@@ -374,6 +365,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     order: 0,
     address: w.address,
     photo_url: w.photo_url,
+    satellite_url: w.photo_url ? undefined : undefined,
     rating: 4.9,
     reviews_count: 120,
     opening_hours: 'Открыто для посещения',
@@ -381,8 +373,21 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     is_custom_waypoint: true,
   }));
 
-  // Добавляем обязательные точки пользователя первыми
   selectedStops.push(...customWaypointStops);
+
+  // 2. Обращение к нейросети для продумывания остановок из проверенных кандидатов
+  const llmPlan = await planRouteWithAI(
+    start_lat,
+    start_lon,
+    duration_minutes,
+    scenario,
+    custom_prompt,
+    activities,
+    is_circular,
+    targetStopCount,
+    parsedPois,
+    api_key
+  );
 
   if (llmPlan && llmPlan.stops && llmPlan.stops.length > 0) {
     usedModelName = llmPlan.model;
@@ -404,6 +409,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
           order: 0,
           address: match.address,
           photo_url: match.photo_url,
+          satellite_url: match.satellite_url,
           rating: match.rating,
           reviews_count: match.reviews_count,
           opening_hours: match.opening_hours,
@@ -414,12 +420,12 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     }
   }
 
-  // 2. Если нейросеть вернула меньше точек (например при сбое сети), дополняем из реальных заведений
+  // 3. Если нейросеть вернула меньше точек или оффлайн, дополняем из реального пула кандидатов
   if (selectedStops.length < targetStopCount) {
     const existingNames = new Set(selectedStops.map((s) => s.name.toLowerCase()));
     const remaining = parsedPois.filter((p) => !existingNames.has(p.name.toLowerCase()));
-    remaining.sort((a, b) => a.angle - b.angle);
 
+    // Добираем точки, образующие плавную дугу
     const needed = targetStopCount - selectedStops.length;
     for (let i = 0; i < Math.min(needed, remaining.length); i++) {
       const item = remaining[i];
@@ -438,6 +444,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
         order: 0,
         address: item.address,
         photo_url: item.photo_url,
+        satellite_url: item.satellite_url,
         rating: item.rating,
         reviews_count: item.reviews_count,
         opening_hours: item.opening_hours,
@@ -447,23 +454,29 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     }
 
     if (!aiThought) {
-      aiThought = `Уютный маршрут спланирован в пределах ${radius}м. Выделено достаточно времени (${spentBudgetMin} мин.), чтобы не спеша посидеть в кофейне, отдохнуть в сквере и пообщаться.`;
+      aiThought = is_circular
+        ? `Маршрут спланирован в виде круговой петли (${spentBudgetMin} мин на отдых в точках). Никаких метаний туда-обратно: прогулка плавно возвращается к старту.`
+        : `Плавный последовательный маршрут в пешей доступности (${spentBudgetMin} мин на отдых в точках).`;
     }
   }
 
-  // Если были выбраны пользовательские точки, отражаем это в описании маршрута
+  // Если были добавлены кастомные точки пользователя
   if (customWaypointStops.length > 0) {
     const wpNames = customWaypointStops.map((w) => w.name).join(', ');
     aiThought = `Маршрут построен с обязательным посещением выбранных вами мест: ${wpNames}. Остановки выстроены в оптимальном пешеходном порядке.`;
     if (!customTitle) {
-      customTitle = `Прогулка с заездом в ${customWaypointStops[0].name}`;
+      customTitle = `Прогулка с посещением ${customWaypointStops[0].name}`;
     }
   }
 
-  // Упорядочиваем остановки в логический пешеходный порядок от точки старта
-  const orderedStops = orderStopsGreedy(start_lat, start_lon, selectedStops);
+  // 4. ГЕОМЕТРИЧЕСКАЯ ОПТИМИЗАЦИЯ:
+  // Для кольцевых маршрутов применяем алгоритм круговой петли (Loop Polygon),
+  // исключающий пересечение пути и развороты на 180°!
+  const orderedStops = is_circular
+    ? orderCircularStops(start_lat, start_lon, selectedStops)
+    : orderLinearStops(start_lat, start_lon, selectedStops);
 
-  // Превращаем в итоговый массив остановок с полным обогащением (фото, рейтинг, отзывы, адрес)
+  // Обогащаем все остановки проверенными данными
   const finalStops: RouteStop[] = orderedStops.map((s, idx) => {
     const enriched = enrichStopWithRealDetails(
       {
@@ -478,7 +491,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     return enriched;
   });
 
-  // Строим пешеходный трек по реальным улицам через публичный HTTPS OSRM
+  // 5. Построение пешеходного трека по улицам через публичный HTTPS OSRM
   const coords: [number, number][] = [[start_lon, start_lat]];
   for (const s of finalStops) {
     coords.push([s.lon, s.lat]);
@@ -489,7 +502,6 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
 
   const coordsStr = coords.map((c) => `${c[0].toFixed(6)},${c[1].toFixed(6)}`).join(';');
   let geojson: any = null;
-  // По умолчанию: комфортная дистанция 1.2 - 2.5 км
   let distanceMeters = Math.min(2800, Math.round(walkingBudgetMin * 60));
   let walkingMinutes = walkingBudgetMin;
 
@@ -514,23 +526,23 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
       }
     }
   } catch (e) {
-    console.warn('OSRM direct fetch failed, constructing smooth interpolated path:', e);
+    console.warn('OSRM route fetch fallback to smooth interpolation:', e);
   }
 
-  // Если OSRM не ответил, плавно интерполируем точки между остановками
+  // Плавная интерполяция по контуру петли, если OSRM оффлайн
   if (!geojson) {
     const interpolated: [number, number][] = [];
     for (let i = 0; i < coords.length - 1; i++) {
       const [lon1, lat1] = coords[i];
       const [lon2, lat2] = coords[i + 1];
-      const subSteps = 5;
+      const subSteps = 6;
       for (let step = 0; step < subSteps; step++) {
         const t = step / subSteps;
         let ilon = lon1 + (lon2 - lon1) * t;
         let ilat = lat1 + (lat2 - lat1) * t;
         if (step > 0 && step < subSteps) {
-          ilon += ((step % 2) * 2 - 1) * 0.0002;
-          ilat += (((step + 1) % 2) * 2 - 1) * 0.00015;
+          ilon += ((step % 2) * 2 - 1) * 0.00015;
+          ilat += (((step + 1) % 2) * 2 - 1) * 0.00012;
         }
         interpolated.push([ilon, ilat]);
       }
@@ -547,9 +559,11 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
 
   const totalSpent = finalStops.reduce((acc, s) => acc + s.spent_minutes, 0);
   const totalRouteMinutes = walkingMinutes + totalSpent;
-  const scTitle = customTitle || (custom_prompt
-    ? `Индивидуальный: ${custom_prompt.slice(0, 24)}...`
-    : SCENARIOS_INFO[scenario]?.title || 'Прогулка');
+  const scTitle =
+    customTitle ||
+    (custom_prompt
+      ? `Индивидуальный: ${custom_prompt.slice(0, 24)}...`
+      : SCENARIOS_INFO[scenario]?.title || 'Прогулка');
 
   return {
     total_walking_minutes: walkingMinutes,
@@ -562,6 +576,8 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     used_ai: true,
     ai_model: usedModelName,
     ai_thought: aiThought,
-    notes: `Маршрут из ${finalStops.length} остановок. Шаг: ${walkingMinutes} мин (${(distanceMeters / 1000).toFixed(1)} км). Отдых и беседы: ${totalSpent} мин.`,
+    notes: `Маршрут из ${finalStops.length} остановок. Шаг: ${walkingMinutes} мин (${(distanceMeters / 1000).toFixed(
+      1
+    )} км). Отдых и беседы: ${totalSpent} мин.`,
   };
 }

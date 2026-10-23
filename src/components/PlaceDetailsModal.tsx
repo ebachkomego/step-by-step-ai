@@ -21,10 +21,18 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
 }) => {
   if (!stop) return null;
 
+  const [activeMediaTab, setActiveMediaTab] = React.useState<'photo' | 'satellite'>('photo');
+  const [photoError, setPhotoError] = React.useState<boolean>(false);
+
   const rating = stop.rating || 4.8;
   const reviewsCount = stop.reviews_count || 128;
   const tags = stop.tags || ['Wi-Fi', 'Кофе с собой', 'Оплата картой', 'Уютная атмосфера'];
   const reviews = stop.reviews || [];
+
+  const displayPhotoUrl =
+    activeMediaTab === 'satellite' || photoError
+      ? stop.satellite_url || stop.photo_url
+      : stop.photo_url || stop.satellite_url;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
@@ -38,18 +46,48 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
       <div className="relative w-full max-w-lg bg-white dark:bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-200/90 dark:border-neutral-800 z-10 flex flex-col max-h-[90vh] overflow-hidden">
         {/* Фотография места с градиентом и бейджами */}
         <div className="relative w-full h-52 sm:h-60 bg-neutral-800 shrink-0 overflow-hidden">
-          {stop.photo_url ? (
+          {displayPhotoUrl ? (
             <img
-              src={stop.photo_url}
+              src={displayPhotoUrl}
               alt={stop.name}
-              className="w-full h-full object-cover"
+              onError={() => setPhotoError(true)}
+              className="w-full h-full object-cover transition-opacity duration-300"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-amber-500/20 to-orange-500/20 text-neutral-400">
               <Coffee className="w-12 h-12 opacity-50" />
             </div>
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+
+          {/* Переключатель Фото / Спутник */}
+          <div className="absolute top-3.5 right-13 flex items-center bg-black/50 backdrop-blur-md rounded-full p-0.5 border border-white/20 z-10">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveMediaTab('photo');
+                setPhotoError(false);
+              }}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold transition-all cursor-pointer ${
+                activeMediaTab === 'photo' && !photoError
+                  ? 'bg-amber-400 text-neutral-950 shadow-sm'
+                  : 'text-white/80 hover:text-white'
+              }`}
+            >
+              📷 Фото
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMediaTab('satellite')}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold transition-all cursor-pointer ${
+                activeMediaTab === 'satellite' || photoError
+                  ? 'bg-amber-400 text-neutral-950 shadow-sm'
+                  : 'text-white/80 hover:text-white'
+              }`}
+            >
+              🛰️ Спутник
+            </button>
+          </div>
 
           {/* Кнопка закрытия */}
           <button
