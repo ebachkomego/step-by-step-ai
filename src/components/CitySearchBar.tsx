@@ -129,7 +129,7 @@ export const CitySearchBar: React.FC<CitySearchBarProps> = ({
   return (
     <div ref={containerRef} className="relative flex-1 min-w-0 pointer-events-auto">
       <div className="relative flex items-center">
-        <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 pointer-events-none" />
+        <Search className="w-4 h-4 text-neutral-500 dark:text-neutral-400 absolute left-3.5 z-10 pointer-events-none" />
         <input
           type="text"
           value={query}
@@ -142,7 +142,7 @@ export const CitySearchBar: React.FC<CitySearchBarProps> = ({
           }}
           onKeyDown={handleKeyDown}
           placeholder="Поиск города или места..."
-          className="w-full h-10 pl-9 pr-8 text-xs sm:text-sm font-semibold rounded-2xl bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg border border-neutral-200/80 dark:border-neutral-800 text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-amber-400 transition-all"
+          className="w-full h-10 pl-10 pr-8 text-xs sm:text-sm font-semibold rounded-2xl bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg border border-neutral-200/80 dark:border-neutral-800 text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-amber-400 transition-all"
         />
         {isLoading ? (
           <Loader2 className="w-4 h-4 text-neutral-400 animate-spin absolute right-3" />

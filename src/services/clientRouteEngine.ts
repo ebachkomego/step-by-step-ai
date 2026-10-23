@@ -425,6 +425,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     duration_minutes,
     scenario,
     is_circular,
+    start_time,
     end_lat,
     end_lon,
     end_name,
@@ -759,8 +760,8 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
 
   // 6. Реальный хронометраж и расчет времени прибытия
   let routeStartDate = new Date();
-  if (request.start_time) {
-    const [sh, sm] = request.start_time.split(':').map(Number);
+  if (start_time) {
+    const [sh, sm] = start_time.split(':').map(Number);
     if (!isNaN(sh) && !isNaN(sm)) {
       routeStartDate = new Date();
       routeStartDate.setHours(sh, sm, 0, 0);
