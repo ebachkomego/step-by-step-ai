@@ -289,15 +289,15 @@ export const MapView: React.FC<MapViewProps> = ({
         [lat, lon],
         {
           hintContent: 'Точка старта прогулки',
-          balloonContentHeader: '<b style="font-size:14px; color:#2b79c2">Точка старта (А)</b>',
+          balloonContentHeader: '<b style="font-size:14px; color:#10b981">Точка старта</b>',
           balloonContentBody:
             '<div style="font-size:12px; margin-top:4px; line-height:1.4">Отсюда начинается ваш пеший маршрут.<br/><span style="color:#64748b">Кликните по карте, чтобы перенести старт.</span></div>',
         },
         {
           iconLayout: 'default#image',
-          iconImageHref: '/start-pin.png',
-          iconImageSize: [32, 49],
-          iconImageOffset: [-16, -49],
+          iconImageHref: '/start-flag.png',
+          iconImageSize: [36, 36],
+          iconImageOffset: [-5, -34],
         }
       );
       map.geoObjects.add(startPlacemark);
@@ -322,14 +322,16 @@ export const MapView: React.FC<MapViewProps> = ({
         [lat, lon],
         {
           hintContent: name || 'Конечная точка прогулки (Финиш 🏁)',
-          balloonContentHeader: '<b style="font-size:14px; color:#e11d48">Точка финиша (Б) 🏁</b>',
+          balloonContentHeader: '<b style="font-size:14px; color:#e11d48">Точка финиша 🏁</b>',
           balloonContentBody: `<div style="font-size:12px; margin-top:4px; line-height:1.4"><b>${
             name || 'Конечная остановка маршрута'
           }</b><br/><span style="color:#64748b">Сюда ведет завершающий отрезок вашей прогулки.</span></div>`,
         },
         {
-          preset: 'islands#redDotIconWithCaption',
-          iconColor: '#e11d48',
+          iconLayout: 'default#image',
+          iconImageHref: '/finish-flag.png',
+          iconImageSize: [36, 36],
+          iconImageOffset: [-5, -34],
         }
       );
       map.geoObjects.add(endPlacemark);
@@ -475,7 +477,7 @@ export const MapView: React.FC<MapViewProps> = ({
       {isPickingEndLocation && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 rounded-2xl bg-rose-600 text-white font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
           <Flag className="w-4 h-4 animate-bounce" />
-          <span>Кликните по карте, чтобы выбрать точку финиша (Б)</span>
+          <span>Кликните по карте, чтобы выбрать точку финиша 🏁</span>
           {onCancelPickingEnd && (
             <button
               type="button"

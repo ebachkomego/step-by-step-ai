@@ -44,6 +44,8 @@ export const App: React.FC = () => {
   // Координаты старта (по умолчанию центр Москвы, Красная площадь)
   const [startLat, setStartLat] = useState<number>(55.751244);
   const [startLon, setStartLon] = useState<number>(37.618423);
+  const [startName, setStartName] = useState<string>('Моё местоположение');
+  const [startAddress, setStartAddress] = useState<string | undefined>(undefined);
 
   // Координаты финиша (конечной точки прогулки)
   const [endLat, setEndLat] = useState<number | null>(null);
@@ -179,6 +181,26 @@ export const App: React.FC = () => {
     };
   }, []);
 
+  // Обратное геокодирование адреса точки старта (для отображения понятного названия вместо координат)
+  useEffect(() => {
+    if (window.ymaps && window.ymaps.geocode) {
+      window.ymaps.geocode([startLat, startLon], { results: 1 }).then((res: any) => {
+        const first = res.geoObjects.get(0);
+        if (first) {
+          const name = first.getAddressLine() || first.properties.get('name');
+          setStartName(name);
+          setStartAddress(name);
+        } else {
+          setStartName(isTrackingUser ? 'Моё местоположение' : 'Выбранная точка старта');
+        }
+      }).catch(() => {
+        setStartName(isTrackingUser ? 'Моё местоположение' : 'Выбранная точка старта');
+      });
+    } else {
+      setStartName(isTrackingUser ? 'Моё местоположение' : 'Выбранная точка старта');
+    }
+  }, [startLat, startLon, isTrackingUser]);
+
   // Выбор точки финиша кликом по карте
   const handleSelectEndLocation = (lat: number, lon: number) => {
     setEndLat(lat);
@@ -192,13 +214,13 @@ export const App: React.FC = () => {
           setEndName(name);
           setEndAddress(name);
         } else {
-          setEndName(`Точка ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+          setEndName('Выбранная точка финиша');
         }
       }).catch(() => {
-        setEndName(`Точка ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+        setEndName('Выбранная точка финиша');
       });
     } else {
-      setEndName(`Точка ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+      setEndName('Выбранная точка финиша');
     }
   };
 
@@ -502,6 +524,8 @@ export const App: React.FC = () => {
       <BottomSheet
         startLat={startLat}
         startLon={startLon}
+        startName={startName}
+        startAddress={startAddress}
         endLat={endLat}
         endLon={endLon}
         endName={endName}

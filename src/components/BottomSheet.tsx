@@ -24,10 +24,13 @@ import {
   Calendar,
 } from 'lucide-react';
 import { calculateStopCount } from '../services/clientRouteEngine';
+import { TimeWheelPickerModal } from './TimeWheelPickerModal';
 
 interface BottomSheetProps {
   startLat: number;
   startLon: number;
+  startName?: string;
+  startAddress?: string;
   endLat?: number | null;
   endLon?: number | null;
   endName?: string;
@@ -96,6 +99,8 @@ function getNowTimeStr(): string {
 export const BottomSheet: React.FC<BottomSheetProps> = ({
   startLat,
   startLon,
+  startName,
+  startAddress,
   endLat = null,
   endLon = null,
   endName,
@@ -128,50 +133,68 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   const [targetArrivalTime, setTargetArrivalTime] = useState<string>('18:00');
   const [currentTimeStr, setCurrentTimeStr] = useState<string>(getNowTimeStr());
 
+  // Время начала прогулки: сейчас (по умолчанию) или запланированное
+  const [isStartTimeNow, setIsStartTimeNow] = useState<boolean>(true);
+  const [customStartTime, setCustomStartTime] = useState<string>(() => {
+    const d = new Date(Date.now() + 30 * 60000);
+    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  });
+  const [isStartPickerOpen, setIsStartPickerOpen] = useState<boolean>(false);
+  const [isArrivalPickerOpen, setIsArrivalPickerOpen] = useState<boolean>(false);
+
   // Обновление текущего времени каждую минуту
   useEffect(() => {
     const t = setInterval(() => setCurrentTimeStr(getNowTimeStr()), 30000);
     return () => clearInterval(t);
   }, []);
 
-  // Если задана конечная точка (Б), отключаем круговой режим
+  // Если задана конечная точка (финиш), отключаем круговой режим
   useEffect(() => {
     if (endLat !== null && endLon !== null) {
       setIsCircular(false);
     }
   }, [endLat, endLon]);
 
-  // Расчет длительности, если пользователь задал желаемое время прибытия
-  const handleTargetTimeChange = (timeStr: string) => {
+  const effectiveStartTime = isStartTimeNow ? currentTimeStr : customStartTime;
+
+  // Расчет времени финиша при выборе длительности
+  const calculatedFinishTime = (() => {
+    const [sh, sm] = effectiveStartTime.split(':').map(Number);
+    if (isNaN(sh) || isNaN(sm)) return '18:00';
+    const totalMinutes = sh * 60 + sm + duration;
+    const finalH = Math.floor(totalMinutes / 60) % 24;
+    const finalM = totalMinutes % 60;
+    return `${finalH.toString().padStart(2, '0')}:${finalM.toString().padStart(2, '0')}`;
+  })();
+
+  // При применении желаемого времени прибытия
+  const handleApplyArrivalTime = (timeStr: string) => {
     setTargetArrivalTime(timeStr);
     const [th, tm] = timeStr.split(':').map(Number);
-    if (!isNaN(th) && !isNaN(tm)) {
-      const now = new Date();
-      const targetDate = new Date();
-      targetDate.setHours(th, tm, 0, 0);
-
-      // Если время уже прошло сегодня, считаем до завтра
-      let diffMs = targetDate.getTime() - now.getTime();
-      if (diffMs < 0) {
-        diffMs += 24 * 3600 * 1000;
-      }
-      const diffMins = Math.max(15, Math.min(360, Math.round(diffMs / 60000)));
+    const [sh, sm] = effectiveStartTime.split(':').map(Number);
+    if (!isNaN(th) && !isNaN(tm) && !isNaN(sh) && !isNaN(sm)) {
+      let diff = (th * 60 + tm) - (sh * 60 + sm);
+      if (diff <= 0) diff += 24 * 60;
+      const diffMins = Math.max(15, Math.min(360, diff));
       setDuration(diffMins);
     }
   };
 
-  const handleQuickAddTargetMinutes = (addMins: number) => {
-    const target = new Date(Date.now() + addMins * 60000);
-    const timeStr = `${target.getHours().toString().padStart(2, '0')}:${target.getMinutes().toString().padStart(2, '0')}`;
-    setTargetArrivalTime(timeStr);
-    setDuration(addMins);
+  // При применении времени старта
+  const handleApplyStartTime = (timeStr: string) => {
+    setCustomStartTime(timeStr);
+    setIsStartTimeNow(false);
+    if (timeMode === 'arrival') {
+      const [th, tm] = targetArrivalTime.split(':').map(Number);
+      const [sh, sm] = timeStr.split(':').map(Number);
+      if (!isNaN(th) && !isNaN(tm) && !isNaN(sh) && !isNaN(sm)) {
+        let diff = (th * 60 + tm) - (sh * 60 + sm);
+        if (diff <= 0) diff += 24 * 60;
+        const diffMins = Math.max(15, Math.min(360, diff));
+        setDuration(diffMins);
+      }
+    }
   };
-
-  // Расчет времени финиша при обычном выборе длительности
-  const calculatedFinishTime = (() => {
-    const finishDate = new Date(Date.now() + duration * 60000);
-    return `${finishDate.getHours().toString().padStart(2, '0')}:${finishDate.getMinutes().toString().padStart(2, '0')}`;
-  })();
 
   const [sheetState, setSheetState] = useState<'collapsed' | 'normal' | 'expanded'>('normal');
 
@@ -226,6 +249,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
       duration_minutes: duration,
       scenario,
       is_circular: endLat !== null && endLon !== null ? false : isCircular,
+      start_time: isStartTimeNow ? undefined : customStartTime,
       end_lat: endLat !== null ? endLat : undefined,
       end_lon: endLon !== null ? endLon : undefined,
       end_name: endName,
@@ -306,34 +330,41 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/70 dark:border-neutral-700/60 space-y-2.5">
               {/* Точка старта */}
               <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 text-neutral-800 dark:text-neutral-200 min-w-0">
-                  <div className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 font-black text-xs">
-                    А
+                <div className="flex items-center gap-2.5 text-neutral-800 dark:text-neutral-200 min-w-0">
+                  <div className="w-7 h-7 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
+                    <img src="/start-flag.png" alt="Старт" className="w-5 h-5 object-contain" />
                   </div>
                   <div className="min-w-0">
-                    <span className="font-extrabold block">Старт:</span>
-                    <span className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate block">
-                      {startLat.toFixed(4)}, {startLon.toFixed(4)} (кликните по карте для смены)
+                    <span className="font-extrabold block text-xs">Старт маршрута:</span>
+                    <span className="text-[11px] text-neutral-600 dark:text-neutral-300 font-medium truncate block">
+                      {startName && !startName.includes(',') && !startName.includes('.')
+                        ? startName
+                        : startName || (isTrackingUser ? 'Моё текущее местоположение' : 'Выбранная точка на карте')}
+                    </span>
+                    <span className="text-[10px] text-neutral-400 dark:text-neutral-500 block">
+                      Кликните по карте для смены точки
                     </span>
                   </div>
                 </div>
               </div>
 
               {/* Точка финиша */}
-              <div className="flex items-center justify-between text-xs pt-2 border-t border-neutral-200/60 dark:border-neutral-700/60">
-                <div className="flex items-center gap-2 text-neutral-800 dark:text-neutral-200 min-w-0">
-                  <div className="w-6 h-6 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 font-black text-xs">
-                    Б
+              <div className="flex items-center justify-between text-xs pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60">
+                <div className="flex items-center gap-2.5 text-neutral-800 dark:text-neutral-200 min-w-0">
+                  <div className="w-7 h-7 rounded-xl bg-neutral-900/5 dark:bg-white/10 flex items-center justify-center shrink-0">
+                    <img src="/finish-flag.png" alt="Финиш" className="w-5 h-5 object-contain" />
                   </div>
                   <div className="min-w-0">
-                    <span className="font-extrabold block">Финиш (конечная точка):</span>
+                    <span className="font-extrabold block text-xs">Финиш (конечная точка):</span>
                     {endLat !== null && endLon !== null ? (
                       <span className="text-rose-600 dark:text-rose-400 font-bold truncate block">
-                        {endName || 'Задана точка финиша'}
+                        {endName && !endName.includes('Точка 5') && !endName.includes(',')
+                          ? endName
+                          : 'Выбранная точка финиша'}
                       </span>
                     ) : (
                       <span className="text-[11px] text-neutral-500 dark:text-neutral-400 block">
-                        Круговой маршрут (вернуться в точку старта)
+                        Круговой маршрут (вернуться на старт)
                       </span>
                     )}
                   </div>
@@ -493,10 +524,43 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               </div>
             </div>
 
-            {/* 3. Время прогулки и прибытия */}
-            <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/70 dark:border-neutral-700/60 space-y-3">
-              {/* Переключатель: Длительность vs Прибыть к определенному времени */}
-              <div className="flex items-center justify-between pb-2 border-b border-neutral-200/60 dark:border-neutral-700/60">
+            {/* 3. Время прогулки и планирование */}
+            <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/70 dark:border-neutral-700/60 space-y-3.5">
+              {/* Выбор времени начала: Сейчас или Запланировать заранее */}
+              <div className="flex items-center justify-between pb-2.5 border-b border-neutral-200/60 dark:border-neutral-700/60">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-neutral-800 dark:text-neutral-200">
+                  <Clock className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Старт прогулки:</span>
+                </div>
+
+                <div className="flex items-center gap-1 bg-neutral-200/70 dark:bg-neutral-700/70 p-0.5 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setIsStartTimeNow(true)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      isStartTimeNow
+                        ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-xs'
+                        : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Сейчас ({currentTimeStr})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsStartPickerOpen(true)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      !isStartTimeNow
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span>{!isStartTimeNow ? `В ${customStartTime}` : 'Задать время'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Переключатель: По времени vs Прибыть к определенному времени */}
+              <div className="flex items-center justify-between">
                 <div className="flex gap-1 bg-neutral-200/70 dark:bg-neutral-700 p-0.5 rounded-xl">
                   <button
                     type="button"
@@ -551,7 +615,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   <div className="space-y-1.5 pt-1">
                     <div className="flex items-center justify-between text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                       <span>Точная настройка:</span>
-                      <span className="font-extrabold text-neutral-900 dark:text-white bg-amber-100 dark:bg-neutral-700 px-2.5 py-0.5 rounded-lg">
+                      <span className="font-extrabold text-neutral-900 dark:text-white bg-neutral-200/70 dark:bg-neutral-700 px-2.5 py-0.5 rounded-lg">
                         {Math.floor(duration / 60) > 0 ? `${Math.floor(duration / 60)} ч ` : ''}
                         {duration % 60 ? `${duration % 60} мин` : ''} ({duration} мин.)
                       </span>
@@ -561,7 +625,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                       <button
                         type="button"
                         onClick={() => setDuration((prev) => Math.max(15, prev - 10))}
-                        className="w-7 h-7 rounded-lg bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 flex items-center justify-center font-bold text-xs cursor-pointer"
+                        className="w-7 h-7 rounded-lg bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 flex items-center justify-center font-bold text-xs cursor-pointer text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100"
                       >
                         -10
                       </button>
@@ -577,7 +641,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                       <button
                         type="button"
                         onClick={() => setDuration((prev) => Math.min(360, prev + 10))}
-                        className="w-7 h-7 rounded-lg bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 flex items-center justify-center font-bold text-xs cursor-pointer"
+                        className="w-7 h-7 rounded-lg bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 flex items-center justify-center font-bold text-xs cursor-pointer text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100"
                       >
                         +10
                       </button>
@@ -586,38 +650,25 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                 </>
               ) : (
                 /* Режим "Прибыть к определенному времени" */
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <label className="text-xs font-bold text-neutral-700 dark:text-neutral-300">
-                      Время прибытия:
-                    </label>
-                    <input
-                      type="time"
-                      value={targetArrivalTime}
-                      onChange={(e) => handleTargetTimeChange(e.target.value)}
-                      className="px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 font-extrabold text-sm text-neutral-900 dark:text-white"
-                    />
-                  </div>
+                <div className="space-y-2 py-1">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 block">
+                        Желаемое время прибытия:
+                      </span>
+                      <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                        Нажмите, чтобы прокрутить время
+                      </span>
+                    </div>
 
-                  {/* Быстрые прибавки от текущего момента */}
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {[
-                      { label: '+30м', val: 30 },
-                      { label: '+45м', val: 45 },
-                      { label: '+1ч', val: 60 },
-                      { label: '+1.5ч', val: 90 },
-                      { label: '+2ч', val: 120 },
-                      { label: '+3ч', val: 180 },
-                    ].map((btn) => (
-                      <button
-                        key={btn.val}
-                        type="button"
-                        onClick={() => handleQuickAddTargetMinutes(btn.val)}
-                        className="px-2.5 py-1 text-xs font-bold rounded-lg bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200 hover:border-amber-400 cursor-pointer"
-                      >
-                        {btn.label}
-                      </button>
-                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setIsArrivalPickerOpen(true)}
+                      className="px-4 py-2 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 hover:border-blue-500 font-mono font-black text-lg text-neutral-900 dark:text-white shadow-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+                    >
+                      <Clock className="w-4 h-4 text-blue-500 shrink-0" />
+                      <span>{targetArrivalTime}</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -898,6 +949,26 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
           </>
         )}
       </div>
+
+      {/* Модальное окно выбора времени старта */}
+      <TimeWheelPickerModal
+        isOpen={isStartPickerOpen}
+        onClose={() => setIsStartPickerOpen(false)}
+        title="Время старта прогулки"
+        initialTime={customStartTime}
+        referenceTime={currentTimeStr}
+        onConfirm={handleApplyStartTime}
+      />
+
+      {/* Модальное окно выбора времени прибытия */}
+      <TimeWheelPickerModal
+        isOpen={isArrivalPickerOpen}
+        onClose={() => setIsArrivalPickerOpen(false)}
+        title="Время прибытия"
+        initialTime={targetArrivalTime}
+        referenceTime={effectiveStartTime}
+        onConfirm={handleApplyArrivalTime}
+      />
     </div>
   );
 };

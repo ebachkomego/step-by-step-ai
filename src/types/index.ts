@@ -14,6 +14,7 @@ export interface RouteRequest {
   duration_minutes: number;
   scenario: string;
   is_circular: boolean;
+  start_time?: string;
   end_lat?: number;
   end_lon?: number;
   end_name?: string;

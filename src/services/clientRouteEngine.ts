@@ -758,8 +758,19 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
   const totalRouteMinutes = walkingMinutes + totalSpent;
 
   // 6. Реальный хронометраж и расчет времени прибытия
-  const now = new Date();
-  const timeline = calculateRouteTimeline(now, enrichedStops, walkingMinutes, is_circular, hasEndPoint);
+  let routeStartDate = new Date();
+  if (request.start_time) {
+    const [sh, sm] = request.start_time.split(':').map(Number);
+    if (!isNaN(sh) && !isNaN(sm)) {
+      routeStartDate = new Date();
+      routeStartDate.setHours(sh, sm, 0, 0);
+      // Если выбранное время старта уже прошло сегодня более чем на 30 мин, относим на завтра
+      if (routeStartDate.getTime() < Date.now() - 30 * 60000) {
+        routeStartDate.setDate(routeStartDate.getDate() + 1);
+      }
+    }
+  }
+  const timeline = calculateRouteTimeline(routeStartDate, enrichedStops, walkingMinutes, is_circular, hasEndPoint);
   enrichedStops = timeline.stops;
 
   const scTitle =
