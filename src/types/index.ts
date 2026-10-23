@@ -16,6 +16,9 @@ export interface RouteRequest {
   is_circular: boolean;
   end_lat?: number;
   end_lon?: number;
+  end_name?: string;
+  end_address?: string;
+  target_arrival_time?: string;
   custom_prompt?: string;
   activities?: string[];
   stop_count?: number; // 0 = auto based on duration
@@ -46,6 +49,10 @@ export interface RouteStop {
   reviews_count?: number;
   photo_url?: string;
   satellite_url?: string;
+  photos?: string[];
+  yandex_url?: string;
+  arrival_time?: string;
+  departure_time?: string;
   opening_hours?: string;
   tags?: string[];
   reviews?: PlaceReview[];
@@ -71,6 +78,14 @@ export interface RouteResponse {
   ai_model?: string;
   ai_thought?: string;
   notes?: string;
+  start_time?: string;
+  arrival_time?: string;
+  end_point?: {
+    lat: number;
+    lon: number;
+    name: string;
+    address?: string;
+  };
 }
 
 export interface ScenarioItem {

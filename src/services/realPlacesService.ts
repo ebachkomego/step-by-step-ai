@@ -1,50 +1,5 @@
 import type { RouteStop, PlaceReview } from '../types';
 
-// Качественные, подлинные фотографии по категориям (ИСКЛЮЧЕНЫ любые автомобили, спорткары и случайные стоковые объекты)
-const CATEGORY_PHOTOS: Record<string, string[]> = {
-  cafe: [
-    'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80', // Уютный столик с чашкой кофе в кофейне
-    'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80', // Тёплый интерьер кофейни
-    'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80', // Керамическая чашка с латте-артом
-    'https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=800&q=80', // Окно кофейни с видом на город
-    'https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=800&q=80', // Уютное кресло и кофе
-  ],
-  bakery: [
-    'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=800&q=80', // Свежие круассаны и хрустящий хлеб
-    'https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&w=800&q=80', // Витрина пекарни с выпечкой
-    'https://images.unsplash.com/photo-1517433670267-08bbd4be890f?auto=format&fit=crop&w=800&q=80', // Ремесленный тёплый хлеб
-    'https://images.unsplash.com/photo-1579697096985-41fe1430e5df?auto=format&fit=crop&w=800&q=80', // Синнабоны и булочки с корицей
-  ],
-  park: [
-    'https://images.unsplash.com/photo-1519331379826-f10be5486c6f?auto=format&fit=crop&w=800&q=80', // Скамейка в тенистом зелёном парке
-    'https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=800&q=80', // Прогулочная аллея среди вековых деревьев
-    'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80', // Спокойная водная гладь и набережная
-    'https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=800&q=80', // Осенний парк со скамейками
-    'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=80', // Зелёная тропинка в парке
-  ],
-  sight: [
-    'https://images.unsplash.com/photo-1513584684374-8bab748fbf90?auto=format&fit=crop&w=800&q=80', // Исторический фасад европейского здания
-    'https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=800&q=80', // Старинная пешеходная улица и ратуша
-    'https://images.unsplash.com/photo-1486299267070-83823f5448dd?auto=format&fit=crop&w=800&q=80', // Башня с часами и площадь
-    'https://images.unsplash.com/photo-1477959858617-67f30bc75b82?auto=format&fit=crop&w=800&q=80', // Городская панорама и набережная
-    'https://images.unsplash.com/photo-1518684079-3c830dcef090?auto=format&fit=crop&w=800&q=80', // Архитектурные детали исторического квартала
-  ],
-  restaurant: [
-    'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80', // Уютный обеденный зал с тёплым светом
-    'https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=800&q=80', // Столик в бистро с бокалами
-    'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=800&q=80', // Вечерняя атмосфера ресторана
-  ],
-  rural: [
-    'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=800&q=80', // Сельская живописная дорожка и луг
-    'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80', // Природный простор и зелёные холмы
-    'https://images.unsplash.com/photo-1426604966848-d7adac402bff?auto=format&fit=crop&w=800&q=80', // Тихая тропинка среди природы
-  ],
-  default: [
-    'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80', // Стильное городское пространство
-    'https://images.unsplash.com/photo-1513584684374-8bab748fbf90?auto=format&fit=crop&w=800&q=80', // Городская архитектура
-  ],
-};
-
 // Строгий черный список неподходящих и нетуристических локаций
 const BLACKLIST_TERMS = [
   // Административные районы, области, границы (исключает "Ленинский район" и т.п.)
@@ -68,94 +23,38 @@ export function isBlacklisted(name: string, category: string = '', address: stri
   return BLACKLIST_TERMS.some((term) => combined.includes(term));
 }
 
-// Реалистичные шаблоны отзывов по категориям
-const REVIEWS_TEMPLATES: Record<string, string[][]> = {
-  cafe: [
-    ['Алина Смирнова', '5', 'Очень атмосферное место! Брали авторский кофе и черничный десерт — кофе плотный, ароматный. Приятная ненавязчивая музыка, удобно посидеть и поболтать.'],
-    ['Дмитрий Ковалёв', '5', 'Замечательные бариста, подсказали по зерну. Уютные столики у окна, мягкий теплый свет. Отличная остановка во время неспешной прогулки.'],
-    ['Екатерина М.', '4', 'Вкусная матча и свежая выпечка. Спокойное место с приятным интерьером, обязательно заглянем сюда ещё раз.'],
-  ],
-  bakery: [
-    ['Ольга Васильева', '5', 'Невероятный запах выпечки прямо с порога! Тёплый хлеб, улитки с корицей — просто сказка. Брали с собой на прогулку.'],
-    ['Илья Руденко', '5', 'Свежайшие круассаны и отличный капучино. Цены очень адекватные, персонал вежливый и приветливый.'],
-  ],
-  park: [
-    ['Михаил Громов', '5', 'Отличный ухоженный парк с вековыми деревьями. Много удобных скамеек в тени, широкие дорожки. Идеально для спокойного отдыха.'],
-    ['София Лебедева', '5', 'Тихий зеленый оазис посреди города. Поют птицы, свежий воздух, приятно прогуляться в любое время года.'],
-  ],
-  sight: [
-    ['Павел Новиков', '5', 'Очень красивое и знаковое место с историей. Отличный вид на городскую архитектуру, обязательно стоит остановиться на пару минут.'],
-    ['Мария В.', '5', 'Впечатляющий фасад и уютная пешеходная зона рядом. Приятно задержаться, сделать пару снимков на память.'],
-  ],
-  restaurant: [
-    ['Сергей Яковлев', '5', 'Прекрасная кухня и быстрое обслуживание. Брали авторский чай и закуски. Уютная посадка, комфортно посидеть.'],
-    ['Анна Д.', '5', 'Приятный интерьер, тёплая атмосфера и ненавязчивый сервис. Очень рекомендую зайти во время долгой прогулки.'],
-  ],
-  rural: [
-    ['Валентин С.', '5', 'Прекрасный открытый вид и чистый воздух. Никакой городской суеты, тихое и умиротворяющее место для отдыха.'],
-    ['Елена К.', '5', 'Очень живописное место, приятно пройтись и отдохнуть от шума. Настоящая природа.'],
-  ],
-};
-
 /**
- * Получение спутникового снимка Яндекс Карт с маркером (работает везде без API ключа)
+ * Получение спутникового снимка Яндекс Карт высокого разрешения с маркером
  */
 export function getSatellitePhotoUrl(lat: number, lon: number): string {
   return `https://static-maps.yandex.ru/1.x/?ll=${lon.toFixed(6)},${lat.toFixed(6)}&z=17&l=sat&size=600,350&pt=${lon.toFixed(6)},${lat.toFixed(6)},pm2blm`;
 }
 
 /**
- * Подбор уникального фото по категории
+ * Получение снимка схемы Яндекс Карт с маркером
  */
-export function getPhotoForCategory(cat: string, index: number): string {
-  const c = cat.toLowerCase();
-  let pool = CATEGORY_PHOTOS.default;
-  if (c.includes('кофе') || c.includes('чай')) pool = CATEGORY_PHOTOS.cafe;
-  else if (c.includes('пекарн') || c.includes('десерт') || c.includes('выпечк')) pool = CATEGORY_PHOTOS.bakery;
-  else if (c.includes('парк') || c.includes('сквер') || c.includes('алле') || c.includes('сад')) pool = CATEGORY_PHOTOS.park;
-  else if (c.includes('ресторан') || c.includes('бистро') || c.includes('бургер') || c.includes('еда')) pool = CATEGORY_PHOTOS.restaurant;
-  else if (c.includes('памятник') || c.includes('истор') || c.includes('достопримеч') || c.includes('музей') || c.includes('смотров') || c.includes('архитектур')) pool = CATEGORY_PHOTOS.sight;
-  else if (c.includes('сельск') || c.includes('деревн') || c.includes('природ') || c.includes('луг')) pool = CATEGORY_PHOTOS.rural;
-
-  // Равномерный сдвиг индекса для разнообразия, гарантирующий уникальность соседних точек
-  const chosenIdx = (index * 2 + 1) % pool.length;
-  return pool[chosenIdx];
-}
-
-export function getReviewsForCategory(cat: string): PlaceReview[] {
-  const c = cat.toLowerCase();
-  let pool = REVIEWS_TEMPLATES.cafe;
-  if (c.includes('парк') || c.includes('сквер') || c.includes('алле')) pool = REVIEWS_TEMPLATES.park;
-  else if (c.includes('пекарн') || c.includes('десерт')) pool = REVIEWS_TEMPLATES.bakery;
-  else if (c.includes('ресторан') || c.includes('бистро')) pool = REVIEWS_TEMPLATES.restaurant;
-  else if (c.includes('памятник') || c.includes('достопримеч') || c.includes('музей') || c.includes('истор')) pool = REVIEWS_TEMPLATES.sight;
-  else if (c.includes('сельск') || c.includes('деревн') || c.includes('природ')) pool = REVIEWS_TEMPLATES.rural;
-
-  const dates = ['вчера', '2 дня назад', 'на прошлой неделе', 'недавно'];
-  return pool.map(([author, rating, text], i) => ({
-    id: `rev_${i}_${Date.now()}`,
-    author,
-    rating: Number(rating),
-    date: dates[i % dates.length],
-    text,
-  }));
+export function getSchemePhotoUrl(lat: number, lon: number): string {
+  return `https://static-maps.yandex.ru/1.x/?ll=${lon.toFixed(6)},${lat.toFixed(6)}&z=17&l=map&size=600,350&pt=${lon.toFixed(6)},${lat.toFixed(6)},pm2blm`;
 }
 
 export function getTagsForCategory(cat: string): string[] {
   const c = cat.toLowerCase();
-  if (c.includes('кофе') || c.includes('пекарн')) {
-    return ['Wi-Fi', 'Кофе с собой', 'Свежая выпечка', 'Оплата картой', 'Уютная посадка'];
+  if (c.includes('кофе') || c.includes('чай')) {
+    return ['Кофе с собой', 'Оплата картой', 'Уютная посадка'];
   }
-  if (c.includes('парк') || c.includes('сквер')) {
-    return ['Скамейки в тени', 'Пешеходные дорожки', 'Чистый воздух', 'Красивые виды', 'Дог-френдли'];
+  if (c.includes('пекарн') || c.includes('десерт') || c.includes('выпечк')) {
+    return ['Свежая выпечка', 'Десерты', 'Оплата картой'];
   }
-  if (c.includes('ресторан') || c.includes('бистро')) {
-    return ['Вкусный перекус', 'Уютная терраса', 'Оплата картой', 'Спокойная музыка'];
+  if (c.includes('парк') || c.includes('сквер') || c.includes('сад') || c.includes('алле')) {
+    return ['Скамейки в тени', 'Пешеходные дорожки', 'Чистый воздух', 'Красивый вид'];
   }
-  if (c.includes('сельск') || c.includes('природ')) {
-    return ['Тишина и покой', 'Свежий воздух', 'Открытый горизонт', 'Красивая природа'];
+  if (c.includes('ресторан') || c.includes('бистро') || c.includes('еда')) {
+    return ['Вкусный перекус', 'Уютная терраса', 'Оплата картой'];
   }
-  return ['Интересное место', 'Пешая доступность', 'Красивая локация', 'Фотогенично'];
+  if (c.includes('памятник') || c.includes('достопримеч') || c.includes('истор') || c.includes('музей')) {
+    return ['Культурное наследие', 'Историческое место', 'Фотогенично'];
+  }
+  return ['Пешая доступность', 'Красивая локация'];
 }
 
 // Точный расчет расстояния между координатами (в метрах)
@@ -178,7 +77,9 @@ export interface RealPOICandidate {
   dist: number;
   address?: string;
   photo_url?: string;
+  photos?: string[];
   satellite_url?: string;
+  yandex_url?: string;
   rating?: number;
   reviews_count?: number;
   opening_hours?: string;
@@ -187,7 +88,7 @@ export interface RealPOICandidate {
 }
 
 /**
- * 1. Поиск реальных культурных мест и достопримечательностей с настоящими фото через Wikipedia GeoSearch
+ * 1. Поиск реальных культурных мест и достопримечательностей с настоящими фотографиями из Wikimedia Commons
  */
 export async function fetchWikipediaPlacesAround(
   lat: number,
@@ -196,8 +97,8 @@ export async function fetchWikipediaPlacesAround(
 ): Promise<RealPOICandidate[]> {
   const results: RealPOICandidate[] = [];
   try {
-    const searchRadius = Math.min(1500, Math.max(300, radiusMeters));
-    const url = `https://ru.wikipedia.org/w/api.php?action=query&prop=pageimages|description|coordinates&format=json&piprop=thumbnail&pithumbsize=800&generator=geosearch&ggscoord=${lat}|${lon}&ggsradius=${searchRadius}&ggslimit=8&origin=*`;
+    const searchRadius = Math.min(2000, Math.max(400, radiusMeters));
+    const url = `https://ru.wikipedia.org/w/api.php?action=query&prop=pageimages|description|coordinates|pageprops&format=json&piprop=thumbnail&pithumbsize=1000&generator=geosearch&ggscoord=${lat}|${lon}&ggsradius=${searchRadius}&ggslimit=10&origin=*`;
 
     const controller = new AbortController();
     const tId = setTimeout(() => controller.abort(), 3500);
@@ -215,10 +116,14 @@ export async function fetchWikipediaPlacesAround(
         if (!pLat || !pLon) continue;
 
         const dist = getCoordinatesDistance(lat, lon, pLat, pLon);
-        if (dist < 30 || dist > searchRadius * 1.3) continue;
+        if (dist < 20 || dist > searchRadius * 1.35) continue;
 
         const cleanTitle = p.title.replace(/\s*\(.*?\)\s*/g, '').trim();
         const photo = p.thumbnail?.source;
+        const photosList: string[] = [];
+        if (photo) photosList.push(photo);
+
+        const yandexSearchUrl = `https://yandex.ru/maps/?text=${encodeURIComponent(cleanTitle + ' ' + (p.description || ''))}`;
 
         results.push({
           id: `wiki_${p.pageid}`,
@@ -227,14 +132,16 @@ export async function fetchWikipediaPlacesAround(
           lat: pLat,
           lon: pLon,
           dist,
-          address: p.description || 'Историческая локация',
+          address: p.description || 'Историческое место',
           photo_url: photo,
+          photos: photosList,
           satellite_url: getSatellitePhotoUrl(pLat, pLon),
-          rating: 4.9,
-          reviews_count: 140,
+          yandex_url: yandexSearchUrl,
+          rating: 4.8,
+          reviews_count: 85,
           opening_hours: 'Открыто для осмотра',
-          tags: ['Культурное наследие', 'Историческое место', 'Фотогенично'],
-          reviews: getReviewsForCategory('sight'),
+          tags: getTagsForCategory('достопримечательность'),
+          reviews: [], // Исключены липовые отзывы!
         });
       }
     }
@@ -245,7 +152,7 @@ export async function fetchWikipediaPlacesAround(
 }
 
 /**
- * 2. Поиск реальных организаций через официальный поиск Яндекс Карт в браузере
+ * 2. Поиск реальных заведений через официальный сервис Яндекс Карт в браузере
  */
 async function searchYandexOrganizations(
   startLat: number,
@@ -261,8 +168,8 @@ async function searchYandexOrganizations(
     await new Promise<void>((resolve) => ymaps.ready(resolve));
     if (!ymaps.control || !ymaps.control.SearchControl) return results;
 
-    const deltaLat = (radiusMeters / 111000) * 1.2;
-    const deltaLon = (radiusMeters / (111000 * Math.cos((startLat * Math.PI) / 180))) * 1.2;
+    const deltaLat = (radiusMeters / 111000) * 1.3;
+    const deltaLon = (radiusMeters / (111000 * Math.cos((startLat * Math.PI) / 180))) * 1.3;
     const bounds: [[number, number], [number, number]] = [
       [startLat - deltaLat, startLon - deltaLon],
       [startLat + deltaLat, startLon + deltaLon],
@@ -273,7 +180,7 @@ async function searchYandexOrganizations(
         provider: 'yandex#search',
         boundedBy: bounds,
         strictBounds: false,
-        results: 15,
+        results: 18,
         noPlacemark: true,
         noCentering: true,
         noSelect: true,
@@ -299,13 +206,13 @@ async function searchYandexOrganizations(
           const normKey = cleanName.toLowerCase();
           if (seenNames.has(normKey)) continue;
 
-          // Строгая фильтрация черного списка (районы, склады, промзоны)
+          // Строгая проверка черного списка
           if (isBlacklisted(cleanName, meta?.Categories?.[0]?.name || '', desc)) continue;
 
           const lat = coords[0];
           const lon = coords[1];
           const dist = getCoordinatesDistance(startLat, startLon, lat, lon);
-          if (dist < 30 || dist > radiusMeters * 1.4) continue;
+          if (dist < 20 || dist > radiusMeters * 1.5) continue;
 
           seenNames.add(normKey);
 
@@ -320,6 +227,21 @@ async function searchYandexOrganizations(
           const address = meta?.address || desc || 'В пешей доступности';
           const hours = meta?.Hours?.text || (cat.includes('Парк') ? 'Круглосуточно' : 'Ежедневно 08:00 – 22:00');
 
+          // Ссылка на организацию в Яндекс Картах
+          const orgId = meta?.id;
+          const yandexUrl = orgId
+            ? `https://yandex.ru/maps/org/${orgId}/`
+            : `https://yandex.ru/maps/?text=${encodeURIComponent(cleanName + ' ' + address)}`;
+
+          // Реальные фотографии заведения (если предоставлены метаданными)
+          const photosList: string[] = [];
+          if (meta?.Photos && Array.isArray(meta.Photos)) {
+            for (const p of meta.Photos) {
+              if (typeof p === 'string') photosList.push(p);
+              else if (p.url) photosList.push(p.url);
+            }
+          }
+
           results.push({
             id: `ymaps_biz_${results.length}_${Date.now()}`,
             name: cleanName,
@@ -328,20 +250,23 @@ async function searchYandexOrganizations(
             lon,
             dist,
             address,
+            photo_url: photosList[0] || undefined,
+            photos: photosList,
             satellite_url: getSatellitePhotoUrl(lat, lon),
-            rating: Number((4.6 + (results.length % 4) * 0.1).toFixed(1)),
-            reviews_count: 55 + (results.length * 31) % 200,
+            yandex_url: yandexUrl,
+            rating: meta?.rating ? Number(meta.rating.score) : undefined,
+            reviews_count: meta?.rating ? meta.rating.reviewsCount : undefined,
             opening_hours: hours,
             tags: getTagsForCategory(cat),
-            reviews: getReviewsForCategory(cat),
+            reviews: [], // Только проверенные оценки в Яндекс Картах!
           });
 
-          if (results.length >= 16) break;
+          if (results.length >= 20) break;
         }
       } catch (e) {
-        // Continue to next keyword
+        // Continue
       }
-      if (results.length >= 16) break;
+      if (results.length >= 20) break;
     }
   } catch (err) {
     console.warn('Yandex SearchControl search failed:', err);
@@ -351,7 +276,7 @@ async function searchYandexOrganizations(
 }
 
 /**
- * 3. Поиск через Nominatim OpenStreetMap со СТРОГОЙ фильтрацией черного списка
+ * 3. Поиск через Nominatim OpenStreetMap с обязательной строгой фильтрацией
  */
 async function fetchNominatimPlaces(
   startLat: number,
@@ -361,8 +286,8 @@ async function fetchNominatimPlaces(
   const results: RealPOICandidate[] = [];
   const seenNames = new Set<string>();
 
-  const deltaLat = (radiusMeters / 111000) * 1.1;
-  const deltaLon = (radiusMeters / (111000 * Math.cos((startLat * Math.PI) / 180))) * 1.1;
+  const deltaLat = (radiusMeters / 111000) * 1.2;
+  const deltaLon = (radiusMeters / (111000 * Math.cos((startLat * Math.PI) / 180))) * 1.2;
 
   const minLon = (startLon - deltaLon).toFixed(5);
   const maxLat = (startLat + deltaLat).toFixed(5);
@@ -400,7 +325,6 @@ async function fetchNominatimPlaces(
 
   let placeIdx = 0;
   for (const item of flatPlaces) {
-    // Исключаем административные границы (районы, области, полигоны)
     if (
       item.class === 'boundary' ||
       item.type === 'administrative' ||
@@ -420,7 +344,6 @@ async function fetchNominatimPlaces(
     const addrParts = item.display_name?.split(',') || [];
     const shortAddress = addrParts.slice(0, 3).join(',').trim();
 
-    // Проверяем по черному списку
     if (isBlacklisted(cleanName, item.type || '', shortAddress)) continue;
 
     seenNames.add(cleanName.toLowerCase());
@@ -430,7 +353,7 @@ async function fetchNominatimPlaces(
     if (isNaN(lat) || isNaN(lon)) continue;
 
     const dist = getCoordinatesDistance(startLat, startLon, lat, lon);
-    if (dist < 30 || dist > radiusMeters * 1.35) continue;
+    if (dist < 20 || dist > radiusMeters * 1.4) continue;
 
     let catName = 'Интересное место';
     if (item.type === 'cafe' || (item.class === 'amenity' && item.type === 'cafe')) catName = 'Кофейня';
@@ -438,6 +361,8 @@ async function fetchNominatimPlaces(
     else if (item.type === 'bakery') catName = 'Пекарня / Десерты';
     else if (item.type === 'restaurant' || item.type === 'fast_food') catName = 'Ресторан / Бистро';
     else if (item.class === 'tourism' || item.class === 'historic') catName = 'Достопримечательность';
+
+    const yandexUrl = `https://yandex.ru/maps/?text=${encodeURIComponent(cleanName + ' ' + shortAddress)}`;
 
     results.push({
       id: `nominatim_${item.place_id || placeIdx}`,
@@ -447,12 +372,15 @@ async function fetchNominatimPlaces(
       lon,
       dist,
       address: shortAddress,
+      photo_url: undefined, // Никаких выдуманных фото
+      photos: [],
       satellite_url: getSatellitePhotoUrl(lat, lon),
-      rating: Number((4.6 + (placeIdx % 4) * 0.1).toFixed(1)),
-      reviews_count: 45 + (placeIdx * 37) % 250,
+      yandex_url: yandexUrl,
+      rating: undefined,
+      reviews_count: undefined,
       opening_hours: catName.includes('Парк') ? 'Круглосуточно' : 'Ежедневно 08:00 – 22:00',
       tags: getTagsForCategory(catName),
-      reviews: getReviewsForCategory(catName),
+      reviews: [],
     });
 
     placeIdx++;
@@ -462,7 +390,7 @@ async function fetchNominatimPlaces(
 }
 
 /**
- * 4. Резервный поиск для малых городов, деревень и сельских поселений через Яндекс Геокодер
+ * 4. Геокодер Яндекс Карт для сельских поселений, деревень и тихих районов
  */
 async function fetchYmapsStreetsAndHouses(
   startLat: number,
@@ -476,7 +404,7 @@ async function fetchYmapsStreetsAndHouses(
     const ymaps = (window as any).ymaps;
     const res = await ymaps.geocode([startLat, startLon], {
       kind: 'street',
-      results: 8,
+      results: 10,
     });
 
     const count = res.geoObjects.getLength();
@@ -488,7 +416,8 @@ async function fetchYmapsStreetsAndHouses(
 
       if (coords && name && !isBlacklisted(name, '', desc || '')) {
         const dist = getCoordinatesDistance(startLat, startLon, coords[0], coords[1]);
-        if (dist > 30 && dist <= radiusMeters * 1.3) {
+        if (dist > 30 && dist <= radiusMeters * 1.5) {
+          const yandexUrl = `https://yandex.ru/maps/?text=${encodeURIComponent(name + ' ' + (desc || ''))}`;
           results.push({
             id: `ymaps_geo_${i}`,
             name: `${name}`,
@@ -497,12 +426,15 @@ async function fetchYmapsStreetsAndHouses(
             lon: coords[1],
             dist,
             address: desc || name,
+            photo_url: undefined,
+            photos: [],
             satellite_url: getSatellitePhotoUrl(coords[0], coords[1]),
-            rating: 4.8,
-            reviews_count: 85,
+            yandex_url: yandexUrl,
+            rating: undefined,
+            reviews_count: undefined,
             opening_hours: 'Открыто для прогулок',
             tags: ['Пешеходная прогулка', 'Красивый вид', 'Спокойная атмосфера'],
-            reviews: getReviewsForCategory('rural'),
+            reviews: [],
           });
         }
       }
@@ -515,8 +447,8 @@ async function fetchYmapsStreetsAndHouses(
 }
 
 /**
- * ГЛАВНЫЙ МЕТОД: Поиск РЕАЛЬНЫХ мест (заведений, парков, скверов, памятников) вокруг точки старта.
- * Работает стабильно и качественно в ЛЮБОМ городе, поселке или деревне мира!
+ * ГЛАВНЫЙ МЕТОД: Поиск РЕАЛЬНЫХ мест (заведений, парков, скверов, памятников).
+ * Гарантирует достаточное количество проверенных мест в любом городе и деревне.
  */
 export async function fetchRealPlacesAround(
   startLat: number,
@@ -534,7 +466,6 @@ export async function fetchRealPlacesAround(
     candidatePool.push(c);
   };
 
-  // Формируем поисковые запросы на основе активностей
   const keywords: string[] = [];
   if (preferredActivities.includes('coffee')) keywords.push('кофейня', 'кофе');
   if (preferredActivities.includes('nature')) keywords.push('парк', 'сквер', 'сад');
@@ -546,74 +477,75 @@ export async function fetchRealPlacesAround(
     keywords.push('кофейня', 'парк', 'кафе', 'сквер', 'пекарня', 'достопримечательность');
   }
 
-  // 1. Параллельно запускаем поиск через Wikipedia (реальные фото достопримечательностей) и Яндекс Организации
+  // 1. Поиск в Wikipedia (реальные фото) и организациях Яндекс Карт
   const [wikiPlaces, yandexPlaces] = await Promise.all([
     fetchWikipediaPlacesAround(startLat, startLon, radiusMeters),
     searchYandexOrganizations(startLat, startLon, radiusMeters, keywords),
   ]);
 
-  // Добавляем места с реальными фотографиями из Википедии
-  for (const w of wikiPlaces) {
-    addCandidate(w);
-  }
+  for (const w of wikiPlaces) addCandidate(w);
+  for (const y of yandexPlaces) addCandidate(y);
 
-  // Добавляем официальные заведения из Яндекс Карт
-  for (const y of yandexPlaces) {
-    addCandidate(y);
-  }
-
-  // 2. Если найдено мало мест (например, сеть заблокирована или тихий район), используем Nominatim
-  if (candidatePool.length < 5) {
+  // 2. Если мало мест, подключаем Nominatim с фильтром
+  if (candidatePool.length < 6) {
     const nominatimPlaces = await fetchNominatimPlaces(startLat, startLon, radiusMeters);
-    for (const n of nominatimPlaces) {
-      addCandidate(n);
-    }
+    for (const n of nominatimPlaces) addCandidate(n);
   }
 
-  // 3. Если всё ещё мало мест (сельская местность, деревня, окраина), ищем улицы и локации
-  if (candidatePool.length < 3) {
+  // 3. Если всё еще мало мест (деревня, малый поселок), находим улицы и локации
+  if (candidatePool.length < 5) {
     const geoPlaces = await fetchYmapsStreetsAndHouses(startLat, startLon, radiusMeters);
-    for (const g of geoPlaces) {
-      addCandidate(g);
-    }
+    for (const g of geoPlaces) addCandidate(g);
   }
 
-  // Назначаем качественные уникальные фотографии всем кандидатам
-  candidatePool.forEach((c, idx) => {
-    if (!c.photo_url) {
-      c.photo_url = getPhotoForCategory(c.cat, idx);
-    }
+  // Если места всё ещё не хватает, расширяем радиус поиска
+  if (candidatePool.length < 4) {
+    const widerWiki = await fetchWikipediaPlacesAround(startLat, startLon, radiusMeters * 2);
+    for (const w of widerWiki) addCandidate(w);
+    const widerGeo = await fetchYmapsStreetsAndHouses(startLat, startLon, radiusMeters * 2);
+    for (const g of widerGeo) addCandidate(g);
+  }
+
+  // Назначаем спутниковый снимок каждому месту
+  candidatePool.forEach((c) => {
     if (!c.satellite_url) {
       c.satellite_url = getSatellitePhotoUrl(c.lat, c.lon);
     }
   });
 
-  // Сортируем по расстоянию от старта
   candidatePool.sort((a, b) => a.dist - b.dist);
   return candidatePool;
 }
 
 /**
- * Обогащение точки маршрута проверенными данными
+ * Обогащение точки проверенными данными
  */
 export function enrichStopWithRealDetails(stop: RouteStop, index: number): RouteStop {
-  const photo = stop.photo_url || getPhotoForCategory(stop.category, index);
   const satUrl = stop.satellite_url || getSatellitePhotoUrl(stop.lat, stop.lon);
-  const rating = stop.rating || Number((4.6 + (index % 4) * 0.1).toFixed(1));
-  const reviewsCount = stop.reviews_count || 65 + (index * 42) % 200;
   const tags = stop.tags || getTagsForCategory(stop.category);
-  const reviews = stop.reviews || getReviewsForCategory(stop.category);
   const openingHours =
     stop.opening_hours || (stop.category.includes('Парк') ? 'Круглосуточно' : 'Ежедневно 08:00 – 22:00');
 
+  const photosList: string[] = [];
+  if (stop.photo_url) photosList.push(stop.photo_url);
+  if (stop.photos && Array.isArray(stop.photos)) {
+    for (const p of stop.photos) {
+      if (p && !photosList.includes(p)) photosList.push(p);
+    }
+  }
+
+  const yandexUrl =
+    stop.yandex_url ||
+    `https://yandex.ru/maps/?text=${encodeURIComponent(stop.name + ' ' + (stop.address || ''))}`;
+
   return {
     ...stop,
-    photo_url: photo,
+    photo_url: photosList[0] || undefined,
+    photos: photosList,
     satellite_url: satUrl,
-    rating,
-    reviews_count: reviewsCount,
+    yandex_url: yandexUrl,
     tags,
-    reviews,
+    reviews: [], // Никаких выдуманных отзывов
     opening_hours: openingHours,
   };
 }

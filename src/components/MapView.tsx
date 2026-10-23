@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import type { RouteResponse, RouteStop, MapLayerType } from '../types';
-import { Layers, Plus, Minus, Navigation } from 'lucide-react';
+import { Layers, Plus, Minus, Navigation, Flag, X } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -12,10 +12,16 @@ declare global {
 interface MapViewProps {
   startLat: number;
   startLon: number;
+  endLat?: number | null;
+  endLon?: number | null;
+  endName?: string;
   userLat: number | null;
   userLon: number | null;
   routeData: RouteResponse | null;
   onMapClick: (lat: number, lon: number) => void;
+  isPickingEndLocation?: boolean;
+  onSelectEndLocation?: (lat: number, lon: number) => void;
+  onCancelPickingEnd?: () => void;
   activeStopIndex: number | null;
   isDark: boolean;
   mapType: MapLayerType;
@@ -30,10 +36,16 @@ interface MapViewProps {
 export const MapView: React.FC<MapViewProps> = ({
   startLat,
   startLon,
+  endLat = null,
+  endLon = null,
+  endName,
   userLat,
   userLon,
   routeData,
   onMapClick,
+  isPickingEndLocation = false,
+  onSelectEndLocation,
+  onCancelPickingEnd,
   activeStopIndex,
   isDark,
   mapType,
@@ -48,8 +60,18 @@ export const MapView: React.FC<MapViewProps> = ({
   const mapInstanceRef = useRef<any>(null);
   const userPlacemarkRef = useRef<any>(null);
   const startPlacemarkRef = useRef<any>(null);
+  const endPlacemarkRef = useRef<any>(null);
   const routeCollectionRef = useRef<any>(null);
   const isLoadedRef = useRef<boolean>(false);
+
+  const isPickingEndRef = useRef(isPickingEndLocation);
+  isPickingEndRef.current = isPickingEndLocation;
+
+  const onSelectEndRef = useRef(onSelectEndLocation);
+  onSelectEndRef.current = onSelectEndLocation;
+
+  const onMapClickRef = useRef(onMapClick);
+  onMapClickRef.current = onMapClick;
 
   // Глобальный хэндлер для клика по кнопке внутри балуна Яндекс Карт
   useEffect(() => {
@@ -74,7 +96,6 @@ export const MapView: React.FC<MapViewProps> = ({
       } else if (type === 'hybrid') {
         map.setType('yandex#hybrid');
       } else {
-        // Режим 'map' (Схема)
         if (dark) {
           try {
             if (window.ymaps.layer && window.ymaps.layer.storage) {
@@ -125,7 +146,7 @@ export const MapView: React.FC<MapViewProps> = ({
             {
               center: [startLat, startLon],
               zoom: 14,
-              controls: [], // Минималистичный чистый интерфейс
+              controls: [],
             },
             {
               suppressMapOpenBlock: true,
@@ -135,26 +156,33 @@ export const MapView: React.FC<MapViewProps> = ({
 
           mapInstanceRef.current = map;
 
-          // Применяем текущий слой (Схема / Спутник / Гибрид / Темный)
           applyMapType(map, mapType, isDark);
 
-          // Коллекция для элементов маршрута (остановки и трек)
           const routeCollection = new window.ymaps.GeoObjectCollection();
           map.geoObjects.add(routeCollection);
           routeCollectionRef.current = routeCollection;
 
-          // Клик по карте для выбора произвольной точки старта
+          // Клик по карте для выбора произвольной точки старта или финиша
           map.events.add('click', (e: any) => {
             const coords = e.get('coords');
             if (coords && coords.length === 2) {
-              onMapClick(coords[0], coords[1]);
+              if (isPickingEndRef.current && onSelectEndRef.current) {
+                onSelectEndRef.current(coords[0], coords[1]);
+              } else if (onMapClickRef.current) {
+                onMapClickRef.current(coords[0], coords[1]);
+              }
             }
           });
 
-          // Создание стартового маркера (минималистичный синий пин)
+          // Создание стартового маркера
           updateStartMarker(map, startLat, startLon);
 
-          // Создание маркера пользователя, если координаты уже есть
+          // Создание конечного маркера (если задан)
+          if (endLat !== null && endLon !== null) {
+            updateEndMarker(map, endLat, endLon, endName);
+          }
+
+          // Создание маркера пользователя
           if (userLat !== null && userLon !== null) {
             updateUserMarker(map, userLat, userLon);
           }
@@ -193,46 +221,51 @@ export const MapView: React.FC<MapViewProps> = ({
         mapInstanceRef.current = null;
         userPlacemarkRef.current = null;
         startPlacemarkRef.current = null;
+        endPlacemarkRef.current = null;
         routeCollectionRef.current = null;
       }
     };
   }, []);
 
-  // 2. Обновление слоя и темы карты при изменении mapType или isDark
+  // 2. Обновление слоя и темы карты
   useEffect(() => {
     if (!mapInstanceRef.current || !isLoadedRef.current) return;
     applyMapType(mapInstanceRef.current, mapType, isDark);
   }, [mapType, isDark]);
 
-  // 3. Обновление маркера старта при изменении startLat / startLon
+  // 3. Обновление маркера старта
   useEffect(() => {
     if (!mapInstanceRef.current || !isLoadedRef.current) return;
     updateStartMarker(mapInstanceRef.current, startLat, startLon);
-    if (!routeData) {
-      mapInstanceRef.current.panTo([startLat, startLon], { duration: 600, flying: true });
+    if (!routeData && (endLat === null || endLon === null)) {
+      mapInstanceRef.current.panTo([startLat, startLon], { duration: 500, flying: true });
     }
   }, [startLat, startLon, routeData]);
 
-  // 4. Обновление маркера живой геолокации пользователя при изменении userLat / userLon
+  // 4. Обновление маркера финиша
+  useEffect(() => {
+    if (!mapInstanceRef.current || !isLoadedRef.current) return;
+    updateEndMarker(mapInstanceRef.current, endLat, endLon, endName);
+  }, [endLat, endLon, endName]);
+
+  // 5. Обновление маркера живой геолокации пользователя
   useEffect(() => {
     if (!mapInstanceRef.current || !isLoadedRef.current) return;
     if (userLat !== null && userLon !== null) {
       updateUserMarker(mapInstanceRef.current, userLat, userLon);
-
-      // Если включено авто-слежение и нет активного маршрута — плавно центрируем
       if (isTrackingUser && !routeData) {
         mapInstanceRef.current.panTo([userLat, userLon], { duration: 300, flying: false });
       }
     }
   }, [userLat, userLon, isTrackingUser, routeData]);
 
-  // 5. Отрисовка маршрута при изменении данных или активной остановки
+  // 6. Отрисовка маршрута
   useEffect(() => {
     if (!mapInstanceRef.current || !routeCollectionRef.current || !isLoadedRef.current) return;
     renderRouteObjects(mapInstanceRef.current, routeCollectionRef.current, routeData, activeStopIndex);
   }, [routeData, activeStopIndex]);
 
-  // Хэндлеры для кнопок масштабирования
+  // Хэндлеры зума
   const handleZoomIn = () => {
     if (mapInstanceRef.current) {
       const currentZoom = mapInstanceRef.current.getZoom();
@@ -247,7 +280,7 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
-  // Хелпер: Обновление / создание маркера старта (минималистичный синий пин)
+  // Стартовый маркер
   const updateStartMarker = (map: any, lat: number, lon: number) => {
     if (startPlacemarkRef.current) {
       startPlacemarkRef.current.geometry.setCoordinates([lat, lon]);
@@ -256,9 +289,9 @@ export const MapView: React.FC<MapViewProps> = ({
         [lat, lon],
         {
           hintContent: 'Точка старта прогулки',
-          balloonContentHeader: '<b style="font-size:14px; color:#2b79c2">Точка старта</b>',
+          balloonContentHeader: '<b style="font-size:14px; color:#2b79c2">Точка старта (А)</b>',
           balloonContentBody:
-            '<div style="font-size:12px; margin-top:4px; line-height:1.4">Отсюда начинается ваш пеший маршрут.<br/><span style="color:#64748b">Кликните по карте в любом месте для смены точки старта.</span></div>',
+            '<div style="font-size:12px; margin-top:4px; line-height:1.4">Отсюда начинается ваш пеший маршрут.<br/><span style="color:#64748b">Кликните по карте, чтобы перенести старт.</span></div>',
         },
         {
           iconLayout: 'default#image',
@@ -272,7 +305,39 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
-  // Хелпер: Обновление / создание маркера текущего GPS пользователя
+  // Конечный маркер (Финиш 🏁)
+  const updateEndMarker = (map: any, lat: number | null, lon: number | null, name?: string) => {
+    if (lat === null || lon === null) {
+      if (endPlacemarkRef.current) {
+        map.geoObjects.remove(endPlacemarkRef.current);
+        endPlacemarkRef.current = null;
+      }
+      return;
+    }
+
+    if (endPlacemarkRef.current) {
+      endPlacemarkRef.current.geometry.setCoordinates([lat, lon]);
+    } else {
+      const endPlacemark = new window.ymaps.Placemark(
+        [lat, lon],
+        {
+          hintContent: name || 'Конечная точка прогулки (Финиш 🏁)',
+          balloonContentHeader: '<b style="font-size:14px; color:#e11d48">Точка финиша (Б) 🏁</b>',
+          balloonContentBody: `<div style="font-size:12px; margin-top:4px; line-height:1.4"><b>${
+            name || 'Конечная остановка маршрута'
+          }</b><br/><span style="color:#64748b">Сюда ведет завершающий отрезок вашей прогулки.</span></div>`,
+        },
+        {
+          preset: 'islands#redDotIconWithCaption',
+          iconColor: '#e11d48',
+        }
+      );
+      map.geoObjects.add(endPlacemark);
+      endPlacemarkRef.current = endPlacemark;
+    }
+  };
+
+  // Маркер пользователя
   const updateUserMarker = (map: any, lat: number, lon: number) => {
     if (userPlacemarkRef.current) {
       userPlacemarkRef.current.geometry.setCoordinates([lat, lon]);
@@ -294,7 +359,7 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
-  // Хелпер: Отрисовка остановок и линии маршрута в коллекции
+  // Отрисовка маршрута и остановок
   const renderRouteObjects = (
     map: any,
     collection: any,
@@ -307,10 +372,9 @@ export const MapView: React.FC<MapViewProps> = ({
       return;
     }
 
-    // Добавляем маркеры остановок с информативным красивым балуном
     data.stops.forEach((stop: RouteStop, index: number) => {
       const isActive = activeIndex === index;
-      const rating = (stop.rating || 4.8).toFixed(1);
+      const rating = stop.rating ? stop.rating.toFixed(1) : '—';
 
       const stopPlacemark = new window.ymaps.Placemark(
         [stop.lat, stop.lon],
@@ -319,7 +383,7 @@ export const MapView: React.FC<MapViewProps> = ({
           balloonContentHeader: `
             <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
               <b style="font-size:15px; color:#0f172a;">${index + 1}. ${stop.name}</b>
-              <span style="font-size:12px; font-weight:800; color:#eab308; white-space:nowrap;">★ ${rating}</span>
+              ${stop.rating ? `<span style="font-size:12px; font-weight:800; color:#eab308; white-space:nowrap;">★ ${rating}</span>` : ''}
             </div>
             ${stop.is_custom_waypoint ? '<div style="margin-top:2px;"><span style="font-size:10px; font-weight:800; background:#10b981; color:#fff; padding:2px 6px; border-radius:6px;">★ ВАША ТОЧКА ПО ПУТИ</span></div>' : ''}
           `,
@@ -334,22 +398,23 @@ export const MapView: React.FC<MapViewProps> = ({
                 <span style="color:#d97706; font-weight:700; font-size:11px; text-transform:uppercase;">${stop.category}</span>
                 <span style="color:#16a34a; font-weight:600; font-size:11px;">⏱ ~${stop.spent_minutes} мин.</span>
               </div>
+              ${stop.arrival_time ? `<div style="color:#0f172a; font-weight:600; font-size:11px; margin-bottom:4px;">🕒 Прибытие: ~${stop.arrival_time}</div>` : ''}
               ${stop.address ? `<div style="color:#64748b; font-size:11px; margin-bottom:4px;">📍 ${stop.address}</div>` : ''}
               <p style="margin:0 0 10px 0; color:#334155; font-size:12px;">${stop.description}</p>
               <button onclick="window.sbsOpenStop && window.sbsOpenStop(${index})" style="width:100%; padding:8px 0; background:#0f172a; color:#ffffff; border:none; border-radius:10px; font-size:12px; font-weight:700; cursor:pointer;">
-                Смотреть отзывы и фото →
+                Смотреть фото и инфо →
               </button>
             </div>
           `,
           hintContent: `${index + 1}. ${stop.name}`,
         },
         {
-          preset: isActive 
-            ? 'islands#redCircleIcon' 
-            : (stop.is_custom_waypoint ? 'islands#darkGreenCircleIcon' : 'islands#blackCircleIcon'),
-          iconColor: isActive 
-            ? '#fc3f1d' 
-            : (stop.is_custom_waypoint ? '#10b981' : '#222222'),
+          preset: isActive
+            ? 'islands#redCircleIcon'
+            : stop.is_custom_waypoint
+            ? 'islands#darkGreenCircleIcon'
+            : 'islands#blackCircleIcon',
+          iconColor: isActive ? '#fc3f1d' : stop.is_custom_waypoint ? '#10b981' : '#222222',
           balloonCloseButton: true,
         }
       );
@@ -366,7 +431,7 @@ export const MapView: React.FC<MapViewProps> = ({
       }
     });
 
-    // Добавляем пешеходную линию GeoJSON
+    // Пешеходная линия GeoJSON
     if (data.geojson?.geometry?.coordinates) {
       const ymapsPoints = data.geojson.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]);
 
@@ -385,7 +450,6 @@ export const MapView: React.FC<MapViewProps> = ({
 
       collection.add(polyline);
 
-      // Плавный зум к границам маршрута с учетом шторки снизу
       const bounds = polyline.geometry.getBounds();
       if (bounds) {
         map.setBounds(bounds, {
@@ -407,15 +471,29 @@ export const MapView: React.FC<MapViewProps> = ({
     >
       <div ref={containerRef} className="w-full h-full" />
 
+      {/* Плавающий баннер при выборе точки финиша на карте */}
+      {isPickingEndLocation && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 rounded-2xl bg-rose-600 text-white font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+          <Flag className="w-4 h-4 animate-bounce" />
+          <span>Кликните по карте, чтобы выбрать точку финиша (Б)</span>
+          {onCancelPickingEnd && (
+            <button
+              type="button"
+              onClick={onCancelPickingEnd}
+              className="px-2 py-0.5 rounded-lg bg-black/30 hover:bg-black/50 text-white text-xs cursor-pointer"
+            >
+              Отмена
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Плавающие кнопки управления картой */}
       <div
         className={`absolute top-20 z-20 flex flex-col gap-2.5 pointer-events-auto transition-all duration-300 ${
-          isDesktopCollapsed
-            ? 'right-4 md:right-6'
-            : 'right-4 md:right-[460px] lg:md:right-[500px]'
+          isDesktopCollapsed ? 'right-4 md:right-6' : 'right-4 md:right-[460px] lg:md:right-[500px]'
         }`}
       >
-        {/* Кнопка слоев карты */}
         {onToggleLayers && (
           <button
             type="button"
@@ -428,7 +506,6 @@ export const MapView: React.FC<MapViewProps> = ({
           </button>
         )}
 
-        {/* Зум + / - */}
         <div className="flex flex-col rounded-2xl overflow-hidden shadow-lg border border-neutral-200/80 dark:border-neutral-800 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md">
           <button
             type="button"
@@ -450,21 +527,22 @@ export const MapView: React.FC<MapViewProps> = ({
           </button>
         </div>
 
-        {/* Кнопка Мое местоположение на карте */}
         {onLocateUser && (
           <button
             type="button"
             onClick={onLocateUser}
-            title="Моё местоположение"
-            aria-label="Моё местоположение"
-            className="w-11 h-11 rounded-2xl bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg border border-neutral-200/80 dark:border-neutral-800 flex items-center justify-center text-neutral-800 dark:text-neutral-200 hover:scale-105 active:scale-95 transition-all cursor-pointer mt-0.5"
+            title={isTrackingUser ? 'Вы привязаны к геолокации' : 'Нажмите, чтобы вернуться к вашей геолокации'}
+            aria-label="Мое местоположение"
+            className={`w-11 h-11 rounded-2xl shadow-lg border backdrop-blur-md flex items-center justify-center transition-all cursor-pointer ${
+              isTrackingUser
+                ? 'bg-blue-600 border-blue-500 text-white shadow-blue-500/25 scale-105'
+                : 'bg-white/95 dark:bg-neutral-900/95 border-neutral-200/80 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:scale-105 active:scale-95'
+            }`}
           >
-            <Navigation className={`w-5 h-5 ${isTrackingUser ? 'text-emerald-500 fill-emerald-500/20' : 'text-blue-500'}`} />
+            <Navigation className={`w-5 h-5 ${isTrackingUser ? 'fill-white text-white' : ''}`} />
           </button>
         )}
       </div>
     </div>
   );
 };
-
-export default MapView;

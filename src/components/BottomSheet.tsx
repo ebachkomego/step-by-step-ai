@@ -1,13 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { RouteResponse, RouteRequest, RouteStop, DesiredWaypoint } from '../types';
-import { 
-  Heart, 
-  Landmark, 
-  Coffee, 
-  Dog, 
-  Clock, 
-  Footprints, 
-  RotateCcw, 
+import {
+  Heart,
+  Landmark,
+  Coffee,
+  Dog,
+  Clock,
+  Footprints,
+  RotateCcw,
   Navigation,
   Sparkles,
   MapPin,
@@ -18,13 +18,22 @@ import {
   Star,
   Plus,
   X,
-  Check
+  Check,
+  Flag,
+  Target,
+  Calendar,
 } from 'lucide-react';
 import { calculateStopCount } from '../services/clientRouteEngine';
 
 interface BottomSheetProps {
   startLat: number;
   startLon: number;
+  endLat?: number | null;
+  endLon?: number | null;
+  endName?: string;
+  onClearEndPoint?: () => void;
+  onStartPickingEndLocation?: () => void;
+  isPickingEndLocation?: boolean;
   routeData: RouteResponse | null;
   isLoading: boolean;
   activeStopIndex: number | null;
@@ -51,12 +60,15 @@ const SCENARIOS = [
 ];
 
 const TIME_CHIPS = [
-  { label: '30 мин', value: 30, short: '30м' },
-  { label: '45 мин', value: 45, short: '45м' },
-  { label: '1 час', value: 60, short: '1ч' },
-  { label: '1.5 ч', value: 90, short: '1.5ч' },
-  { label: '2 часа', value: 120, short: '2ч' },
-  { label: '3 часа', value: 180, short: '3ч' },
+  { label: '30м', value: 30 },
+  { label: '45м', value: 45 },
+  { label: '1ч', value: 60 },
+  { label: '1.5ч', value: 90 },
+  { label: '2ч', value: 120 },
+  { label: '2.5ч', value: 150 },
+  { label: '3ч', value: 180 },
+  { label: '4ч', value: 240 },
+  { label: '5ч+', value: 300 },
 ];
 
 const ACTIVITIES = [
@@ -76,9 +88,20 @@ const QUICK_PROMPT_IDEAS = [
   'Красивый сквер и выпечка с корицей',
 ];
 
+function getNowTimeStr(): string {
+  const d = new Date();
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+}
+
 export const BottomSheet: React.FC<BottomSheetProps> = ({
   startLat,
   startLon,
+  endLat = null,
+  endLon = null,
+  endName,
+  onClearEndPoint,
+  onStartPickingEndLocation,
+  isPickingEndLocation = false,
   routeData,
   isLoading,
   activeStopIndex,
@@ -100,38 +123,68 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   const [duration, setDuration] = useState<number>(60);
   const [isCircular, setIsCircular] = useState<boolean>(true);
 
-  // Состояние на мобильных (шторка снизу): 'collapsed' | 'normal' | 'expanded'
-  const [sheetState, setSheetState] = useState<'collapsed' | 'normal' | 'expanded'>('normal');
+  // Режим выбора времени: 'duration' (по минутам) или 'arrival' (прибыть к точному часу)
+  const [timeMode, setTimeMode] = useState<'duration' | 'arrival'>('duration');
+  const [targetArrivalTime, setTargetArrivalTime] = useState<string>('18:00');
+  const [currentTimeStr, setCurrentTimeStr] = useState<string>(getNowTimeStr());
 
-  // Состояние на ПК (боковая панель справа): свернута вбок или открыта
-  const [internalDesktopCollapsed, setInternalDesktopCollapsed] = useState<boolean>(false);
-  const isDesktopCollapsed = isDesktopCollapsedProp !== undefined ? isDesktopCollapsedProp : internalDesktopCollapsed;
-  const toggleDesktopCollapse = onToggleDesktopCollapse || (() => setInternalDesktopCollapsed(!internalDesktopCollapsed));
+  // Обновление текущего времени каждую минуту
+  useEffect(() => {
+    const t = setInterval(() => setCurrentTimeStr(getNowTimeStr()), 30000);
+    return () => clearInterval(t);
+  }, []);
 
-  // Кастомный промпт нейросети и выбранные активности
-  const [customPrompt, setCustomPrompt] = useState<string>('');
-  const [selectedActivities, setSelectedActivities] = useState<string[]>(['coffee', 'nature']);
-  const [manualStopCount, setManualStopCount] = useState<number>(0); // 0 = авто
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
+  // Если задана конечная точка (Б), отключаем круговой режим
+  useEffect(() => {
+    if (endLat !== null && endLon !== null) {
+      setIsCircular(false);
+    }
+  }, [endLat, endLon]);
 
-  // Реф и хэндлер для интерактивного ползунка времени
-  const sliderContainerRef = useRef<HTMLDivElement>(null);
+  // Расчет длительности, если пользователь задал желаемое время прибытия
+  const handleTargetTimeChange = (timeStr: string) => {
+    setTargetArrivalTime(timeStr);
+    const [th, tm] = timeStr.split(':').map(Number);
+    if (!isNaN(th) && !isNaN(tm)) {
+      const now = new Date();
+      const targetDate = new Date();
+      targetDate.setHours(th, tm, 0, 0);
 
-  const activeChipIndex = Math.max(
-    0,
-    TIME_CHIPS.findIndex((c) => c.value === duration)
-  );
-
-  const handleSliderPointer = (clientX: number) => {
-    if (!sliderContainerRef.current) return;
-    const rect = sliderContainerRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const fraction = Math.max(0, Math.min(0.999, x / rect.width));
-    const idx = Math.min(TIME_CHIPS.length - 1, Math.floor(fraction * TIME_CHIPS.length));
-    setDuration(TIME_CHIPS[idx].value);
+      // Если время уже прошло сегодня, считаем до завтра
+      let diffMs = targetDate.getTime() - now.getTime();
+      if (diffMs < 0) {
+        diffMs += 24 * 3600 * 1000;
+      }
+      const diffMins = Math.max(15, Math.min(360, Math.round(diffMs / 60000)));
+      setDuration(diffMins);
+    }
   };
 
-  // Отслеживание свайпов / перетаскивания островка на мобилках
+  const handleQuickAddTargetMinutes = (addMins: number) => {
+    const target = new Date(Date.now() + addMins * 60000);
+    const timeStr = `${target.getHours().toString().padStart(2, '0')}:${target.getMinutes().toString().padStart(2, '0')}`;
+    setTargetArrivalTime(timeStr);
+    setDuration(addMins);
+  };
+
+  // Расчет времени финиша при обычном выборе длительности
+  const calculatedFinishTime = (() => {
+    const finishDate = new Date(Date.now() + duration * 60000);
+    return `${finishDate.getHours().toString().padStart(2, '0')}:${finishDate.getMinutes().toString().padStart(2, '0')}`;
+  })();
+
+  const [sheetState, setSheetState] = useState<'collapsed' | 'normal' | 'expanded'>('normal');
+
+  const [internalDesktopCollapsed, setInternalDesktopCollapsed] = useState<boolean>(false);
+  const isDesktopCollapsed = isDesktopCollapsedProp !== undefined ? isDesktopCollapsedProp : internalDesktopCollapsed;
+  const toggleDesktopCollapse =
+    onToggleDesktopCollapse || (() => setInternalDesktopCollapsed(!internalDesktopCollapsed));
+
+  const [customPrompt, setCustomPrompt] = useState<string>('');
+  const [selectedActivities, setSelectedActivities] = useState<string[]>(['coffee', 'nature']);
+  const [manualStopCount, setManualStopCount] = useState<number>(0);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
+
   const touchStartY = useRef<number | null>(null);
 
   const handleDragStart = (clientY: number) => {
@@ -164,41 +217,42 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
     );
   };
 
+  const effectiveStops = calculateStopCount(duration, manualStopCount);
+
   const handleBuildRoute = () => {
     onSubmit({
       start_lat: startLat,
       start_lon: startLon,
       duration_minutes: duration,
       scenario,
-      is_circular: isCircular,
+      is_circular: endLat !== null && endLon !== null ? false : isCircular,
+      end_lat: endLat !== null ? endLat : undefined,
+      end_lon: endLon !== null ? endLon : undefined,
+      end_name: endName,
+      target_arrival_time: timeMode === 'arrival' ? targetArrivalTime : calculatedFinishTime,
       custom_prompt: customPrompt.trim() || undefined,
       activities: selectedActivities,
-      stop_count: manualStopCount > 0 ? manualStopCount : undefined,
+      stop_count: effectiveStops, // СТРОГО гарантирует запрошенное количество остановок
       waypoints: waypoints.length > 0 ? waypoints : undefined,
     });
     setSheetState('normal');
   };
 
-  const effectiveStops = calculateStopCount(duration, manualStopCount);
-
-  // Классы высоты для 3 положений шторки на мобильных
   const heightClasses = {
     collapsed: 'h-[64px]',
-    normal: 'h-[52vh]',
+    normal: 'h-[54vh]',
     expanded: 'h-[92vh]',
   }[sheetState];
 
   return (
     <div
       className={`fixed transition-all duration-300 ease-out z-30 flex flex-col bg-white dark:bg-neutral-900 shadow-2xl border-neutral-200/90 dark:border-neutral-800 
-      /* Мобильный вид: шторка снизу по центру */
       bottom-0 inset-x-0 mx-auto w-full max-w-xl rounded-t-3xl border-t ${heightClasses}
-      /* Десктопный вид (ПК): отдельная панель справа сбоку на весь экран */
-      md:top-0 md:bottom-0 md:right-0 md:left-auto md:w-[440px] lg:md:w-[480px] md:h-full md:rounded-l-3xl md:rounded-r-none md:border-l md:border-t-0 md:shadow-2xl ${
+      md:top-0 md:bottom-0 md:right-0 md:left-auto md:w-[450px] lg:md:w-[490px] md:h-full md:rounded-l-3xl md:rounded-r-none md:border-l md:border-t-0 md:shadow-2xl ${
         isDesktopCollapsed ? 'md:translate-x-full' : 'md:translate-x-0'
       }`}
     >
-      {/* Кнопка сворачивания/разворачивания боковой панели на ПК */}
+      {/* Кнопка сворачивания на ПК */}
       <button
         type="button"
         onClick={toggleDesktopCollapse}
@@ -208,7 +262,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         {isDesktopCollapsed ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
       </button>
 
-      {/* 1. Верхний островок управления шторкой (на мобилках) */}
+      {/* Островок шторки на мобилках */}
       <div
         onClick={handlePillClick}
         onTouchStart={(e) => handleDragStart(e.touches[0].clientY)}
@@ -219,41 +273,98 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
       >
         <div className="w-14 h-1.5 bg-neutral-300 dark:bg-neutral-600 rounded-full group-hover:bg-neutral-400 dark:group-hover:bg-neutral-500 transition-colors" />
 
-        {/* В свернутом виде видна аккуратная строка вызова */}
         {sheetState === 'collapsed' && (
-          <div className="flex items-center justify-between w-full px-5 mt-1.5 cursor-pointer">
-            <span className="text-sm font-bold text-neutral-800 dark:text-neutral-200 truncate">
-              {routeData ? `${routeData.scenario_title} • ${routeData.total_route_minutes} мин` : 'Куда пойдем сегодня?'}
-            </span>
-            <span className="text-xs font-bold text-amber-500 whitespace-nowrap pl-2">
-              Потяните вверх ↑
-            </span>
+          <div className="mt-1 flex items-center justify-between w-full px-5 text-xs text-neutral-600 dark:text-neutral-300 font-bold">
+            <span>{routeData ? `${routeData.scenario_title} (${routeData.stops.length} ост.)` : 'Куда пойдём?'}</span>
+            <span className="text-amber-500 font-extrabold">Развернуть ↑</span>
           </div>
         )}
       </div>
 
-      {/* 2. Контентная часть панели */}
-      <div className={`px-5 pb-6 overflow-y-auto space-y-4 flex-1 ${sheetState === 'collapsed' ? 'hidden md:block' : 'block'}`}>
+      {/* Контентная часть */}
+      <div
+        className={`px-5 pb-6 overflow-y-auto space-y-4 flex-1 ${
+          sheetState === 'collapsed' ? 'hidden md:block' : 'block'
+        }`}
+      >
         {!routeData ? (
           /* ================= ЭКРАН НАСТРОЙКИ МАРШРУТА ================= */
           <>
-            {/* Шапка: Чистый заголовок + бейдж */}
+            {/* Шапка с живыми часами реального времени */}
             <div className="flex items-center justify-between pt-2 md:pt-4">
               <h2 className="text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
                 Куда пойдём?
               </h2>
 
-              {waypoints.length > 0 && (
-                <span className="text-xs font-bold px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300/40 dark:border-amber-700/40 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  <span>
-                    {waypoints.length} {waypoints.length === 1 ? 'место по пути' : waypoints.length < 5 ? 'места по пути' : 'мест по пути'}
-                  </span>
-                </span>
-              )}
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 text-xs font-bold shadow-xs">
+                <Clock className="w-3.5 h-3.5 text-amber-500" />
+                <span>Сейчас: {currentTimeStr}</span>
+              </div>
             </div>
 
-            {/* 1. Поле пожелания нейросети */}
+            {/* Блок: Точки старта и финиша прогулки */}
+            <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/70 dark:border-neutral-700/60 space-y-2.5">
+              {/* Точка старта */}
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-neutral-800 dark:text-neutral-200 min-w-0">
+                  <div className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 font-black text-xs">
+                    А
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-extrabold block">Старт:</span>
+                    <span className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate block">
+                      {startLat.toFixed(4)}, {startLon.toFixed(4)} (кликните по карте для смены)
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Точка финиша */}
+              <div className="flex items-center justify-between text-xs pt-2 border-t border-neutral-200/60 dark:border-neutral-700/60">
+                <div className="flex items-center gap-2 text-neutral-800 dark:text-neutral-200 min-w-0">
+                  <div className="w-6 h-6 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 font-black text-xs">
+                    Б
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-extrabold block">Финиш (конечная точка):</span>
+                    {endLat !== null && endLon !== null ? (
+                      <span className="text-rose-600 dark:text-rose-400 font-bold truncate block">
+                        {endName || 'Задана точка финиша'}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-neutral-500 dark:text-neutral-400 block">
+                        Круговой маршрут (вернуться в точку старта)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {endLat !== null && endLon !== null ? (
+                  <button
+                    type="button"
+                    onClick={onClearEndPoint}
+                    className="px-2.5 py-1 text-xs font-bold text-neutral-500 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-neutral-200/60 dark:hover:bg-neutral-700 transition-colors cursor-pointer"
+                  >
+                    ✕ Сбросить
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onStartPickingEndLocation}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer ${
+                      isPickingEndLocation
+                        ? 'bg-rose-600 text-white shadow-md animate-pulse'
+                        : 'bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+                    }`}
+                  >
+                    <Flag className="w-3.5 h-3.5" />
+                    <span>{isPickingEndLocation ? 'Кликните на карте' : 'Выбрать финиш'}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Поле авторского пожелания нейросети */}
             <div className="space-y-2">
               <div className="relative flex items-center">
                 <Sparkles className="w-4 h-4 text-amber-500 absolute left-3.5 pointer-events-none" />
@@ -275,7 +386,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                 )}
               </div>
 
-              {/* Быстрые подсказки-идеи в аккуратную ленту */}
+              {/* Быстрые подсказки-идеи */}
               <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                 {QUICK_PROMPT_IDEAS.map((idea) => (
                   <button
@@ -290,49 +401,29 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               </div>
             </div>
 
-            {/* Блок: Точки и места, куда зайти по пути */}
-            <div className="space-y-2 p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200/70 dark:border-neutral-700/60">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Места по пути</span>
-                  {waypoints.length > 0 && (
-                    <span className="text-[11px] font-extrabold px-1.5 py-0.2 rounded-md bg-amber-400 text-neutral-950">
-                      {waypoints.length}
-                    </span>
+            {/* Точки по пути */}
+            {waypoints.length > 0 && (
+              <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300/50 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-300">
+                  <span>Обязательные места по пути ({waypoints.length}):</span>
+                  {onClearWaypoints && (
+                    <button type="button" onClick={onClearWaypoints} className="text-amber-700 hover:underline cursor-pointer">
+                      Очистить
+                    </button>
                   )}
-                </span>
-                {waypoints.length > 0 && onClearWaypoints && (
-                  <button
-                    type="button"
-                    onClick={onClearWaypoints}
-                    className="text-[11px] font-semibold text-rose-500 hover:underline cursor-pointer"
-                  >
-                    Очистить
-                  </button>
-                )}
-              </div>
-
-              {waypoints.length === 0 ? (
-                <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
-                  Ищите заведения или улицы через поиск вверху и нажимайте{' '}
-                  <span className="font-bold text-amber-600 dark:text-amber-400">+ По пути</span>, чтобы включить их в свой маршрут.
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5 pt-1">
+                </div>
+                <div className="flex flex-wrap gap-1.5">
                   {waypoints.map((wp) => (
                     <span
                       key={wp.id}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-amber-100/80 dark:bg-amber-950/70 border border-amber-300/60 dark:border-amber-700/60 text-amber-950 dark:text-amber-200"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-neutral-900 text-xs font-semibold text-neutral-800 dark:text-neutral-200 border border-amber-200 dark:border-neutral-700"
                     >
-                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                      <span className="truncate max-w-[170px]">{wp.name}</span>
+                      <span>📍 {wp.name}</span>
                       {onRemoveWaypoint && (
                         <button
                           type="button"
                           onClick={() => onRemoveWaypoint(wp.id)}
-                          className="hover:text-rose-600 dark:hover:text-rose-400 text-neutral-400 p-0.5 rounded-full cursor-pointer ml-0.5"
-                          title="Удалить эту точку"
+                          className="hover:text-rose-500 cursor-pointer ml-1"
                         >
                           ✕
                         </button>
@@ -340,60 +431,48 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                     </span>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* 2. Сценарии прогулок */}
+            {/* 1. Сценарии */}
             <div>
               <span className="text-sm font-bold text-neutral-800 dark:text-neutral-200 block mb-2.5">
-                Сценарий прогулки
+                Формат прогулки
               </span>
-              <div className="grid grid-cols-2 gap-2.5">
-                {SCENARIOS.map((s) => {
-                  const Icon = s.icon;
-                  const isSelected = scenario === s.id;
+              <div className="grid grid-cols-2 gap-2">
+                {SCENARIOS.map((sc) => {
+                  const Icon = sc.icon;
+                  const active = scenario === sc.id;
                   return (
                     <button
-                      key={s.id}
+                      key={sc.id}
                       type="button"
-                      onClick={() => setScenario(s.id)}
-                      className={`p-3 text-left rounded-2xl border transition-all cursor-pointer flex items-center gap-3 ${
-                        isSelected
-                          ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-950 border-neutral-900 dark:border-white shadow-sm'
-                          : 'bg-neutral-50 dark:bg-neutral-800/60 text-neutral-800 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/60 hover:border-neutral-300'
+                      onClick={() => setScenario(sc.id)}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                        active
+                          ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 border-neutral-900 shadow-md ring-2 ring-amber-400'
+                          : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700 hover:border-neutral-300'
                       }`}
                     >
-                      <div
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                          isSelected
-                            ? 'bg-amber-400 text-neutral-950'
-                            : 'bg-neutral-200/80 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300'
-                        }`}
-                      >
-                        <Icon className="w-5 h-5" />
+                      <div className="flex items-center gap-2 mb-1">
+                        <Icon className={`w-4 h-4 ${active ? 'text-amber-400 dark:text-amber-600' : 'text-neutral-500'}`} />
+                        <span className="font-extrabold text-xs md:text-sm">{sc.title}</span>
                       </div>
-                      <div className="min-w-0">
-                        <div className="font-extrabold text-sm truncate">{s.title}</div>
-                        <div
-                          className={`text-xs truncate ${
-                            isSelected ? 'text-neutral-300 dark:text-neutral-600' : 'text-neutral-400'
-                          }`}
-                        >
-                          {s.desc}
-                        </div>
-                      </div>
+                      <p className={`text-[11px] leading-tight line-clamp-1 ${active ? 'opacity-80' : 'text-neutral-500 dark:text-neutral-400'}`}>
+                        {sc.desc}
+                      </p>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* 3. Чем заняться в пути */}
+            {/* 2. Активности */}
             <div>
-              <span className="text-sm font-bold text-neutral-800 dark:text-neutral-200 block mb-2.5">
-                Чем заняться в пути
+              <span className="text-sm font-bold text-neutral-800 dark:text-neutral-200 block mb-2">
+                Что включить в прогулку?
               </span>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {ACTIVITIES.map((act) => {
                   const active = selectedActivities.includes(act.id);
                   return (
@@ -414,108 +493,137 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               </div>
             </div>
 
-            {/* 4. Время прогулки */}
-            <div>
-              <div className="flex items-center justify-between mb-2.5">
-                <span className="text-sm font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-neutral-400" />
-                  Время прогулки
-                </span>
-                <span className="text-sm font-extrabold text-neutral-900 dark:text-white bg-amber-100 dark:bg-neutral-800 px-3 py-1 rounded-xl">
-                  {duration} минут ({Math.floor(duration / 60) > 0 ? `${Math.floor(duration / 60)}ч ` : ''}{duration % 60 ? `${duration % 60}м` : ''})
-                </span>
-              </div>
-
-              {/* Кнопки времени ровно в 6 колонок */}
-              <div className="grid grid-cols-6 gap-1.5 sm:gap-2">
-                {TIME_CHIPS.map((chip) => (
+            {/* 3. Время прогулки и прибытия */}
+            <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/70 dark:border-neutral-700/60 space-y-3">
+              {/* Переключатель: Длительность vs Прибыть к определенному времени */}
+              <div className="flex items-center justify-between pb-2 border-b border-neutral-200/60 dark:border-neutral-700/60">
+                <div className="flex gap-1 bg-neutral-200/70 dark:bg-neutral-700 p-0.5 rounded-xl">
                   <button
-                    key={chip.value}
                     type="button"
-                    onClick={() => setDuration(chip.value)}
-                    className={`py-2 px-1 text-center rounded-xl text-xs md:text-sm font-bold transition-all cursor-pointer ${
-                      duration === chip.value
-                        ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 shadow-md ring-2 ring-amber-400'
-                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                    onClick={() => setTimeMode('duration')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      timeMode === 'duration'
+                        ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-xs'
+                        : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
                     }`}
                   >
-                    {chip.label}
+                    ⏱️ По времени
                   </button>
-                ))}
-              </div>
-
-              {/* Ползунок времени с рисками, ровно спозиционированный под кнопками выбора */}
-              <div
-                ref={sliderContainerRef}
-                className="relative mt-3 pt-1 pb-1 select-none cursor-pointer"
-                onPointerDown={(e) => {
-                  handleSliderPointer(e.clientX);
-                  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                }}
-                onPointerMove={(e) => {
-                  if (e.buttons === 1) {
-                    handleSliderPointer(e.clientX);
-                  }
-                }}
-              >
-                {/* Горизонтальный фоновый трек между центрами первой и последней колонки */}
-                <div className="absolute top-[16px] left-[8.33%] right-[8.33%] h-1 bg-neutral-200 dark:bg-neutral-700 rounded-full" />
-
-                {/* Активная подсвеченная часть трека */}
-                <div
-                  className="absolute top-[16px] left-[8.33%] h-1 bg-amber-400 rounded-full transition-all duration-150"
-                  style={{
-                    width: `${(activeChipIndex / 5) * (100 - 16.66)}%`
-                  }}
-                />
-
-                {/* Сетка рисок в точности по 6 колонкам */}
-                <div className="grid grid-cols-6 gap-1.5 sm:gap-2 relative z-10">
-                  {TIME_CHIPS.map((chip, idx) => {
-                    const isActive = duration === chip.value;
-                    const isPassed = activeChipIndex >= idx;
-
-                    return (
-                      <div
-                        key={chip.value}
-                        onClick={() => setDuration(chip.value)}
-                        className="flex flex-col items-center justify-center group py-0.5"
-                      >
-                        {/* Риска / Ползунок */}
-                        <div className="h-6 flex items-center justify-center">
-                          {isActive ? (
-                            <div className="w-5 h-5 rounded-full bg-amber-400 shadow-md ring-4 ring-amber-400/25 flex items-center justify-center transition-transform scale-110">
-                              <div className="w-2 h-2 rounded-full bg-neutral-900" />
-                            </div>
-                          ) : (
-                            <div
-                              className={`w-1 rounded-full transition-all ${
-                                isPassed
-                                  ? 'bg-amber-400 h-3.5'
-                                  : 'bg-neutral-300 dark:bg-neutral-600 h-2.5 group-hover:h-3.5 group-hover:bg-neutral-400'
-                              }`}
-                            />
-                          )}
-                        </div>
-
-                        {/* Подпись риска по минутам */}
-                        <span
-                          className={`text-[11px] font-bold mt-1 transition-colors ${
-                            isActive
-                              ? 'text-amber-500 dark:text-amber-400 font-black'
-                              : 'text-neutral-400 dark:text-neutral-500'
-                          }`}
-                        >
-                          {chip.short}
-                        </span>
-                      </div>
-                    );
-                  })}
+                  <button
+                    type="button"
+                    onClick={() => setTimeMode('arrival')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      timeMode === 'arrival'
+                        ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-xs'
+                        : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
+                    }`}
+                  >
+                    🎯 Прибыть к...
+                  </button>
                 </div>
+
+                <span className="text-xs font-extrabold text-amber-600 dark:text-amber-400">
+                  {timeMode === 'duration' ? `Финиш в ~${calculatedFinishTime}` : `В запасе: ${duration} мин.`}
+                </span>
               </div>
+
+              {timeMode === 'duration' ? (
+                <>
+                  {/* Кнопки времени */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {TIME_CHIPS.map((chip) => (
+                      <button
+                        key={chip.value}
+                        type="button"
+                        onClick={() => setDuration(chip.value)}
+                        className={`flex-1 min-w-[50px] py-1.5 px-1 text-center rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          duration === chip.value
+                            ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 shadow-md ring-2 ring-amber-400'
+                            : 'bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 hover:border-neutral-400'
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Точный ползунок времени (от 15 до 360 минут с шагом 5 минут) */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+                      <span>Точная настройка:</span>
+                      <span className="font-extrabold text-neutral-900 dark:text-white bg-amber-100 dark:bg-neutral-700 px-2.5 py-0.5 rounded-lg">
+                        {Math.floor(duration / 60) > 0 ? `${Math.floor(duration / 60)} ч ` : ''}
+                        {duration % 60 ? `${duration % 60} мин` : ''} ({duration} мин.)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setDuration((prev) => Math.max(15, prev - 10))}
+                        className="w-7 h-7 rounded-lg bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 flex items-center justify-center font-bold text-xs cursor-pointer"
+                      >
+                        -10
+                      </button>
+                      <input
+                        type="range"
+                        min="15"
+                        max="360"
+                        step="5"
+                        value={duration}
+                        onChange={(e) => setDuration(Number(e.target.value))}
+                        className="flex-1 accent-amber-500 cursor-pointer"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setDuration((prev) => Math.min(360, prev + 10))}
+                        className="w-7 h-7 rounded-lg bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 flex items-center justify-center font-bold text-xs cursor-pointer"
+                      >
+                        +10
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Режим "Прибыть к определенному времени" */
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs font-bold text-neutral-700 dark:text-neutral-300">
+                      Время прибытия:
+                    </label>
+                    <input
+                      type="time"
+                      value={targetArrivalTime}
+                      onChange={(e) => handleTargetTimeChange(e.target.value)}
+                      className="px-3 py-1.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 font-extrabold text-sm text-neutral-900 dark:text-white"
+                    />
+                  </div>
+
+                  {/* Быстрые прибавки от текущего момента */}
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {[
+                      { label: '+30м', val: 30 },
+                      { label: '+45м', val: 45 },
+                      { label: '+1ч', val: 60 },
+                      { label: '+1.5ч', val: 90 },
+                      { label: '+2ч', val: 120 },
+                      { label: '+3ч', val: 180 },
+                    ].map((btn) => (
+                      <button
+                        key={btn.val}
+                        type="button"
+                        onClick={() => handleQuickAddTargetMinutes(btn.val)}
+                        className="px-2.5 py-1 text-xs font-bold rounded-lg bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200 hover:border-amber-400 cursor-pointer"
+                      >
+                        {btn.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* 5. Дополнительные настройки (сворачиваемый блок для чистоты) */}
+            {/* 4. Настройка остановок */}
             <div className="pt-1">
               <button
                 type="button"
@@ -523,7 +631,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                 className="flex items-center gap-1.5 text-xs font-bold text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors cursor-pointer"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" />
-                <span>{showAdvancedSettings ? 'Скрыть настройки остановок' : 'Настроить количество остановок'}</span>
+                <span>{showAdvancedSettings ? 'Скрыть количество остановок' : 'Настроить количество остановок'}</span>
               </button>
 
               {showAdvancedSettings && (
@@ -542,7 +650,8 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                         { label: '2', val: 2 },
                         { label: '3', val: 3 },
                         { label: '4', val: 4 },
-                        { label: '5+', val: 5 },
+                        { label: '5', val: 5 },
+                        { label: '6', val: 6 },
                       ].map((btn) => (
                         <button
                           key={btn.val}
@@ -559,24 +668,11 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                       ))}
                     </div>
                   </div>
-
-                  {/* Кольцевой маршрут */}
-                  <label className="flex items-center justify-between pt-1 cursor-pointer">
-                    <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                      Вернуться в точку старта
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={isCircular}
-                      onChange={(e) => setIsCircular(e.target.checked)}
-                      className="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 border-neutral-300"
-                    />
-                  </label>
                 </div>
               )}
             </div>
 
-            {/* Главная кнопка запуска построения */}
+            {/* Главная кнопка построения маршрута */}
             <button
               type="button"
               disabled={isLoading}
@@ -591,7 +687,10 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               ) : (
                 <>
                   <Navigation className="w-5 h-5 fill-neutral-950" />
-                  <span>Построить маршрут ({effectiveStops} {effectiveStops === 1 ? 'остановка' : effectiveStops < 5 ? 'остановки' : 'остановок'})</span>
+                  <span>
+                    Построить маршрут ({effectiveStops}{' '}
+                    {effectiveStops === 1 ? 'остановка' : effectiveStops < 5 ? 'остановки' : 'остановок'})
+                  </span>
                 </>
               )}
             </button>
@@ -599,7 +698,6 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         ) : (
           /* ================= ЭКРАН ГОТОВОГО МАРШРУТА ================= */
           <>
-            {/* Сводка маршрута с крупными четкими цифрами */}
             <div className="flex items-start justify-between pt-2 md:pt-4">
               <div>
                 <div className="flex items-center gap-2">
@@ -607,12 +705,14 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                     {routeData.scenario_title}
                   </span>
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-bold truncate max-w-[170px]">
-                    {routeData.ai_model || 'Gemini 3.5 Flash'}
+                    {routeData.ai_model || 'StepByStep AI'}
                   </span>
                 </div>
 
                 <h3 className="text-3xl font-black tracking-tight text-neutral-950 dark:text-white mt-1">
-                  {Math.floor(routeData.total_route_minutes / 60) > 0 ? `${Math.floor(routeData.total_route_minutes / 60)} ч ` : ''}
+                  {Math.floor(routeData.total_route_minutes / 60) > 0
+                    ? `${Math.floor(routeData.total_route_minutes / 60)} ч `
+                    : ''}
                   {routeData.total_route_minutes % 60 ? `${routeData.total_route_minutes % 60} мин` : ''}
                 </h3>
 
@@ -624,12 +724,21 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   </span>
                   <span className="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-3 py-1 rounded-xl border border-amber-200/60 dark:border-amber-800/40">
                     <Coffee className="w-4 h-4 text-amber-500" />
-                    {Math.max(0, routeData.total_route_minutes - routeData.total_walking_minutes)} мин. отдых и беседы
-                  </span>
-                  <span className="text-xs text-neutral-400 pl-1">
-                    • {routeData.stops.length} остановок
+                    {Math.max(0, routeData.total_route_minutes - routeData.total_walking_minutes)} мин. отдых
                   </span>
                 </div>
+
+                {/* Расчет реального времени прибытия */}
+                {routeData.arrival_time && (
+                  <div className="mt-2 text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Старт: {routeData.start_time || 'сейчас'}</span>
+                    <span>→</span>
+                    <span className="text-amber-600 dark:text-amber-400">
+                      Прибытие на финиш: ~{routeData.arrival_time}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -654,15 +763,23 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               </div>
             </div>
 
-            {/* Замысел маршрута от нейросети */}
+            {/* Карточка конечной точки маршрута */}
+            {routeData.end_point && (
+              <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/50 flex items-center justify-between text-xs font-bold text-rose-900 dark:text-rose-300">
+                <span className="flex items-center gap-2">
+                  <Flag className="w-4 h-4 text-rose-600" />
+                  <span>Конечный пункт (Б): {routeData.end_point.name}</span>
+                </span>
+                <span>Финиш</span>
+              </div>
+            )}
+
+            {/* Замысел прогулки */}
             {routeData.ai_thought && (
               <div className="bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-amber-500/5 dark:from-neutral-800 dark:via-neutral-800/80 dark:to-neutral-850 border border-amber-300/60 dark:border-amber-500/30 rounded-2xl p-4 shadow-sm space-y-1.5 animate-in fade-in">
                 <div className="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-400">
                   <Sparkles className="w-4 h-4 text-amber-500 animate-pulse shrink-0" />
-                  <span>Замысел прогулки от нейросети</span>
-                  <span className="text-xs ml-auto px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 font-semibold truncate max-w-[150px]">
-                    {routeData.ai_model || 'Gemini 3.5 Flash'}
-                  </span>
+                  <span>Замысел прогулки</span>
                 </div>
                 <p className="text-xs md:text-sm leading-relaxed text-neutral-800 dark:text-neutral-200 font-medium">
                   {routeData.ai_thought}
@@ -670,15 +787,13 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               </div>
             )}
 
-            {/* Список остановок с фотографиями, рейтингом и карточкой места */}
+            {/* Список остановок */}
             <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-neutral-800 dark:text-neutral-200 block">
                   Остановки маршрута ({routeData.stops.length}):
                 </span>
-                <span className="text-xs text-neutral-400">
-                  Нажмите на точку для отзывов и фото
-                </span>
+                <span className="text-xs text-neutral-400">Нажмите на точку для инфо</span>
               </div>
 
               {routeData.stops.map((stop, idx) => {
@@ -697,20 +812,19 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                     }`}
                   >
                     <div className="flex gap-3">
-                      {/* Миниатюра реального фото заведения */}
-                      {stop.photo_url ? (
-                        <div className="w-16 h-16 rounded-xl bg-neutral-200 dark:bg-neutral-700 overflow-hidden shrink-0 shadow-xs">
-                          <img
-                            src={stop.photo_url}
-                            alt={stop.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-16 h-16 rounded-xl bg-amber-400/20 text-amber-500 flex items-center justify-center shrink-0">
-                          <Coffee className="w-6 h-6" />
-                        </div>
-                      )}
+                      {/* Реальное фото или превью спутникового снимка */}
+                      <div className="w-16 h-16 rounded-xl bg-neutral-200 dark:bg-neutral-700 overflow-hidden shrink-0 shadow-xs relative">
+                        <img
+                          src={stop.photo_url || stop.satellite_url}
+                          alt={stop.name}
+                          className="w-full h-full object-cover"
+                        />
+                        {!stop.photo_url && (
+                          <div className="absolute inset-0 bg-black/30 flex items-center justify-center text-[10px] font-bold text-white text-center p-0.5">
+                            Спутник
+                          </div>
+                        )}
+                      </div>
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
@@ -728,18 +842,23 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                             )}
                           </div>
                           <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 shrink-0">
-                            {stop.spent_minutes} мин
+                            ~{stop.spent_minutes} мин
                           </span>
                         </div>
 
                         <div className="flex items-center gap-2 mt-1 text-xs">
-                          <span className="text-amber-500 font-bold flex items-center gap-0.5">
-                            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                            {stop.rating?.toFixed(1) || '4.8'}
-                          </span>
-                          <span className="text-neutral-400 truncate">
-                            • {stop.category}
-                          </span>
+                          {stop.rating && (
+                            <span className="text-amber-500 font-bold flex items-center gap-0.5">
+                              <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                              {stop.rating.toFixed(1)}
+                            </span>
+                          )}
+                          <span className="text-neutral-400 truncate">• {stop.category}</span>
+                          {stop.arrival_time && (
+                            <span className="text-amber-600 dark:text-amber-400 font-semibold ml-auto">
+                              🕒 ~{stop.arrival_time}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -765,11 +884,11 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                         }}
                         className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
                       >
-                        <span>Карточка места и отзывы</span>
+                        <span>Фото и информация</span>
                         <span>→</span>
                       </button>
                       <span className="text-[10px] text-neutral-400">
-                        {stop.reviews_count || 120} отзывов
+                        {stop.photo_url ? '📷 Реальное фото' : '🛰️ Спутниковый снимок'}
                       </span>
                     </div>
                   </div>

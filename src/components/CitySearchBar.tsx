@@ -13,12 +13,14 @@ interface SearchResultItem {
 interface CitySearchBarProps {
   onSelectLocation: (lat: number, lon: number, name: string) => void;
   onAddWaypoint?: (wp: DesiredWaypoint) => void;
+  onSetFinish?: (lat: number, lon: number, name: string, address?: string) => void;
   existingWaypointIds?: string[];
 }
 
 export const CitySearchBar: React.FC<CitySearchBarProps> = ({
   onSelectLocation,
   onAddWaypoint,
+  onSetFinish,
   existingWaypointIds = [],
 }) => {
   const [query, setQuery] = useState<string>('');
@@ -192,6 +194,22 @@ export const CitySearchBar: React.FC<CitySearchBarProps> = ({
                   </div>
                 </button>
 
+                {/* Кнопка "Финиш" = задать как конечную точку */}
+                {onSetFinish && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSetFinish(item.lat, item.lon, item.name, item.description);
+                      setIsOpen(false);
+                    }}
+                    className="shrink-0 px-2 py-1 text-xs font-bold rounded-xl bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 text-rose-800 dark:text-rose-300 transition-all flex items-center gap-1 cursor-pointer"
+                    title="Установить как конечную точку маршрута"
+                  >
+                    <span>🏁 Финиш</span>
+                  </button>
+                )}
+
                 {/* Кнопка "По пути" = добавить как промежуточную остановку */}
                 {onAddWaypoint && (
                   <button
@@ -210,7 +228,7 @@ export const CitySearchBar: React.FC<CitySearchBarProps> = ({
                       setIsOpen(false);
                     }}
                     disabled={isAlreadyAdded}
-                    className={`shrink-0 px-2.5 py-1 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer ${
+                    className={`shrink-0 px-2 py-1 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer ${
                       isAlreadyAdded
                         ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 cursor-default'
                         : 'bg-amber-100/90 hover:bg-amber-200 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-900 dark:text-amber-300 active:scale-95'

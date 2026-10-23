@@ -45,6 +45,13 @@ export const App: React.FC = () => {
   const [startLat, setStartLat] = useState<number>(55.751244);
   const [startLon, setStartLon] = useState<number>(37.618423);
 
+  // Координаты финиша (конечной точки прогулки)
+  const [endLat, setEndLat] = useState<number | null>(null);
+  const [endLon, setEndLon] = useState<number | null>(null);
+  const [endName, setEndName] = useState<string | undefined>(undefined);
+  const [endAddress, setEndAddress] = useState<string | undefined>(undefined);
+  const [isPickingEndLocation, setIsPickingEndLocation] = useState<boolean>(false);
+
   // Живые координаты пользователя (GPS)
   const [userLat, setUserLat] = useState<number | null>(null);
   const [userLon, setUserLon] = useState<number | null>(null);
@@ -172,8 +179,53 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Клик по карте для выбора произвольной точки старта
+  // Выбор точки финиша кликом по карте
+  const handleSelectEndLocation = (lat: number, lon: number) => {
+    setEndLat(lat);
+    setEndLon(lon);
+    setIsPickingEndLocation(false);
+    if (window.ymaps && window.ymaps.geocode) {
+      window.ymaps.geocode([lat, lon], { results: 1 }).then((res: any) => {
+        const firstGeoObject = res.geoObjects.get(0);
+        if (firstGeoObject) {
+          const name = firstGeoObject.getAddressLine() || firstGeoObject.properties.get('name');
+          setEndName(name);
+          setEndAddress(name);
+        } else {
+          setEndName(`Точка ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+        }
+      }).catch(() => {
+        setEndName(`Точка ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+      });
+    } else {
+      setEndName(`Точка ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+    }
+  };
+
+  // Выбор точки финиша через поисковую строку
+  const handleSetFinishFromSearch = (lat: number, lon: number, name: string, address?: string) => {
+    setEndLat(lat);
+    setEndLon(lon);
+    setEndName(name);
+    setEndAddress(address || name);
+    setIsPickingEndLocation(false);
+  };
+
+  // Очистка точки финиша
+  const handleClearEndPoint = () => {
+    setEndLat(null);
+    setEndLon(null);
+    setEndName(undefined);
+    setEndAddress(undefined);
+    setIsPickingEndLocation(false);
+  };
+
+  // Клик по карте для выбора произвольной точки старта или финиша
   const handleMapClick = (lat: number, lon: number) => {
+    if (isPickingEndLocation) {
+      handleSelectEndLocation(lat, lon);
+      return;
+    }
     setStartLat(lat);
     setStartLon(lon);
     setIsTrackingUser(false);
@@ -359,10 +411,16 @@ export const App: React.FC = () => {
       <MapView
         startLat={startLat}
         startLon={startLon}
+        endLat={endLat}
+        endLon={endLon}
+        endName={endName}
         userLat={userLat}
         userLon={userLon}
         routeData={routeData}
         onMapClick={handleMapClick}
+        isPickingEndLocation={isPickingEndLocation}
+        onSelectEndLocation={handleSelectEndLocation}
+        onCancelPickingEnd={() => setIsPickingEndLocation(false)}
         activeStopIndex={activeStopIndex}
         isDark={isDark}
         mapType={mapType}
@@ -389,6 +447,7 @@ export const App: React.FC = () => {
           <CitySearchBar
             onSelectLocation={handleSelectSearchLocation}
             onAddWaypoint={handleAddWaypoint}
+            onSetFinish={handleSetFinishFromSearch}
             existingWaypointIds={waypoints.map((w) => w.id)}
           />
         </div>
@@ -443,12 +502,21 @@ export const App: React.FC = () => {
       <BottomSheet
         startLat={startLat}
         startLon={startLon}
+        endLat={endLat}
+        endLon={endLon}
+        endName={endName}
+        onClearEndPoint={handleClearEndPoint}
+        onStartPickingEndLocation={() => setIsPickingEndLocation(true)}
+        isPickingEndLocation={isPickingEndLocation}
         routeData={routeData}
         isLoading={isLoading}
         activeStopIndex={activeStopIndex}
         onSelectStop={(idx) => setActiveStopIndex(idx)}
         onSubmit={handleGenerateRoute}
-        onReset={() => setRouteData(null)}
+        onReset={() => {
+          setRouteData(null);
+          setActiveStopIndex(null);
+        }}
         isTrackingUser={isTrackingUser}
         onToggleTracking={handleToggleTracking}
         onOpenHistory={() => setIsHistoryOpen(true)}
@@ -500,6 +568,10 @@ export const App: React.FC = () => {
           setStartLat(stop.lat);
           setStartLon(stop.lon);
           setIsTrackingUser(false);
+          setRouteData(null);
+        }}
+        onSetAsFinish={(stop) => {
+          handleSetFinishFromSearch(stop.lat, stop.lon, stop.name, stop.address);
           setRouteData(null);
         }}
       />
