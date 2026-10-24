@@ -58,19 +58,19 @@ interface BottomSheetProps {
   onToggleFavorite?: () => void;
 }
 
-// Единый полный список форматов прогулки (лаконичные названия без переполнения кнопок)
+// Единый полный список форматов прогулки
 export const WALK_FORMATS = [
   { id: 'walk', title: 'Прогулка', icon: Footprints },
   { id: 'sights', title: 'Памятники', icon: Landmark },
-  { id: 'coffee', title: 'Кофе', icon: Coffee },
+  { id: 'coffee', title: 'Кофейни', icon: Coffee },
   { id: 'fastfood', title: 'Фастфуд', icon: UtensilsCrossed },
-  { id: 'views', title: 'Виды', icon: Camera },
-  { id: 'nature', title: 'Парки', icon: Trees },
-  { id: 'bakery', title: 'Пекарни', icon: Croissant },
+  { id: 'views', title: 'Красивые виды', icon: Camera },
+  { id: 'nature', title: 'Природа', icon: Trees },
+  { id: 'bakery', title: 'Выпечка', icon: Croissant },
   { id: 'date', title: 'Свидание', icon: Heart },
   { id: 'dog_walk', title: 'С собакой', icon: Dog },
   { id: 'shopping', title: 'Магазины', icon: ShoppingBag },
-  { id: 'quiet', title: 'Тишина', icon: Armchair },
+  { id: 'quiet', title: 'Тихий отдых', icon: Armchair },
   { id: 'sweets', title: 'Сладкое', icon: IceCream },
 ];
 
@@ -549,7 +549,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               </div>
 
               {/* Адаптивная сетка карточек форматов БЕЗ мелких подписей */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
                 {WALK_FORMATS.map((fmt) => {
                   const Icon = fmt.icon;
                   const active = selectedFormats.includes(fmt.id);
@@ -558,22 +558,22 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                       key={fmt.id}
                       type="button"
                       onClick={() => toggleFormat(fmt.id)}
-                      className={`p-2.5 sm:p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-2 min-w-0 ${
+                      className={`px-2 py-2 sm:px-2.5 sm:py-2.5 min-h-[46px] rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 min-w-0 ${
                         active
                           ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 border-neutral-900 shadow-md ring-2 ring-amber-400'
                           : 'bg-neutral-50 dark:bg-neutral-800/80 text-neutral-800 dark:text-neutral-200 border-neutral-200/80 dark:border-neutral-700 hover:border-neutral-300'
                       }`}
                     >
                       <div
-                        className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                        className={`w-6 h-6 sm:w-7 sm:h-7 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
                           active
                             ? 'bg-amber-400/20 text-amber-400 dark:text-amber-600'
                             : 'bg-neutral-200/60 dark:bg-neutral-700/60 text-neutral-500 dark:text-neutral-400'
                         }`}
                       >
-                        <Icon className="w-4 h-4" />
+                        <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                       </div>
-                      <span className="font-extrabold text-xs sm:text-sm leading-tight select-none truncate">
+                      <span className="font-bold text-[11px] sm:text-xs leading-[1.15] select-none text-left break-words min-w-0">
                         {fmt.title}
                       </span>
                     </button>
