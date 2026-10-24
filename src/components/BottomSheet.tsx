@@ -844,10 +844,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               ) : (
                 <>
                   <Navigation className="w-5 h-5 fill-neutral-950" />
-                  <span>
-                    Построить маршрут ({effectiveStops}{' '}
-                    {effectiveStops === 1 ? 'остановка' : effectiveStops < 5 ? 'остановки' : 'остановок'})
-                  </span>
+                  <span>Построить маршрут</span>
                 </>
               )}
             </button>
