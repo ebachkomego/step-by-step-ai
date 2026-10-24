@@ -38,7 +38,18 @@
   pointer-events: none !important;
 }
 
-/* В темной теме - темные стилизованные балуны */
+/* Фирменная темная тема для Яндекс Карт */
+.dark .yandex-map-container {
+  background-color: #1a1e24 !important;
+}
+
+.dark .yandex-map-container:not(.satellite-active) [class*="ground-pane"],
+.dark .yandex-map-container:not(.satellite-active) [class*="ymaps-2-1-"][class*="-ground-pane"] {
+  filter: invert(93%) hue-rotate(185deg) brightness(88%) contrast(115%) saturate(85%) !important;
+  transition: filter 0.25s ease-in-out;
+}
+
+/* В темной теме - темные стилизованные балуны и подсказки */
 .dark [class*="balloon__layout"] {
   background: #1e293b !important;
   color: #f8fafc !important;
@@ -55,6 +66,16 @@
 }
 .dark [class*="balloon__close-button"] {
   filter: invert(1) brightness(2) !important;
+}
+.dark [class*="hint__layout"] {
+  background: #1e293b !important;
+  color: #f8fafc !important;
+  border: 1px solid #334155 !important;
+  border-radius: 8px !important;
+}
+.dark [class*="copyright__text"],
+.dark [class*="copyright__link"] {
+  color: rgba(255, 255, 255, 0.6) !important;
 }
 
 
