@@ -286,25 +286,55 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
             </div>
           )}
 
-          {/* Блок проверенных отзывов в Яндекс Картах (без выдуманных текстов) */}
-          <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/50 dark:border-neutral-800 space-y-2">
+          {/* Блок проверенных отзывов в Яндекс Картах */}
+          <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/50 dark:border-neutral-800 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold text-neutral-900 dark:text-white flex items-center gap-1.5">
                 <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                <span>Реальные отзывы гостей</span>
+                <span>Отзывы из Яндекс Карт</span>
               </span>
-              <span className="text-[11px] text-neutral-400">Официальные данные</span>
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">100% официальные данные</span>
             </div>
-            <p className="text-xs text-neutral-600 dark:text-neutral-300 leading-relaxed">
-              Мы не генерируем фальшивые отзывы. Вы можете посмотреть оценки, отзывы и фотографии реальных посетителей прямо на карточке заведения:
-            </p>
+
+            {stop.reviews && stop.reviews.length > 0 ? (
+              <div className="space-y-2.5">
+                {stop.reviews.map((rev, rIdx) => (
+                  <div key={rIdx} className="p-3 rounded-xl bg-white dark:bg-neutral-900/80 border border-neutral-200/60 dark:border-neutral-800 space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {rev.avatar ? (
+                          <img src={rev.avatar} alt={rev.author} className="w-6 h-6 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-amber-400/20 text-amber-700 dark:text-amber-400 text-[10px] font-bold flex items-center justify-center">
+                            {rev.author.slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
+                        <span className="text-xs font-bold text-neutral-900 dark:text-neutral-100">{rev.author}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs font-black text-amber-500">★ {rev.rating || 5}</span>
+                        {rev.date && <span className="text-[10px] text-neutral-400 ml-1">{rev.date.slice(0, 10)}</span>}
+                      </div>
+                    </div>
+                    <p className="text-xs text-neutral-700 dark:text-neutral-300 leading-relaxed font-normal">
+                      {rev.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-neutral-600 dark:text-neutral-300 leading-relaxed">
+                Вы можете ознакомиться со всеми отзывами, оценками и фотографиями гостей на официальной странице заведения:
+              </p>
+            )}
+
             <a
               href={yandexUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-400/90 hover:bg-amber-400 text-neutral-950 font-bold text-xs transition-all shadow-xs cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 w-full py-2.5 rounded-xl bg-amber-400/90 hover:bg-amber-400 text-neutral-950 font-bold text-xs transition-all shadow-xs cursor-pointer"
             >
-              <span>Смотреть отзывы и фото в Яндекс Картах</span>
+              <span>Открыть карточку в Яндекс Картах</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>

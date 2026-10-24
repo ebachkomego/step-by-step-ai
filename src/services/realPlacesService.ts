@@ -66,130 +66,7 @@ export function isReligious(
   );
 }
 
-// Проверенные заведения и бульвары в Бобруйске (включая точки у дома пользователя: Батова, Рокоссовского, Сикорского)
-const BOBRUISK_VERIFIED_PLACES: RealPOICandidate[] = [
-  {
-    id: 'bobr_shaurmaster_1',
-    name: 'Шаурмастер',
-    cat: 'Фастфуд / Стритфуд',
-    lat: 53.191859,
-    lon: 29.225388,
-    dist: 0,
-    address: 'ул. Генерала Батова, 17А',
-    rating: 4.9,
-    reviews_count: 142,
-    opening_hours: 'Ежедневно 10:00 – 22:00',
-    tags: ['Сочная шаурма', 'Быстрый перекус', 'Оплата картой', 'Еда с собой'],
-    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Шаурмастер Бобруйск ул Генерала Батова 17А'),
-    reviews: [],
-  },
-  {
-    id: 'bobr_shaurmichka_2',
-    name: 'Шаурмичка',
-    cat: 'Фастфуд / Стритфуд',
-    lat: 53.191350,
-    lon: 29.226200,
-    dist: 0,
-    address: 'ул. Генерала Батова / Назаровка',
-    rating: 4.8,
-    reviews_count: 89,
-    opening_hours: 'Ежедневно 10:00 – 23:00',
-    tags: ['Шаурма у дома', 'Быстрый стритфуд', 'Кофе и напитки'],
-    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Шаурмичка Бобруйск Батова'),
-    reviews: [],
-  },
-  {
-    id: 'bobr_priberez_alley_3',
-    name: 'Приберезинский бульвар',
-    cat: 'Живописный бульвар',
-    lat: 53.196000,
-    lon: 29.232000,
-    dist: 0,
-    address: 'Приберезинский бульвар (вдоль Березины)',
-    rating: 4.9,
-    reviews_count: 67,
-    opening_hours: 'Круглосуточно для прогулок',
-    tags: ['Широкий тротуар', 'Красивый вид на реку', 'Освещенная аллея', 'Без частного сектора'],
-    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Приберезинский бульвар Бобруйск'),
-    reviews: [],
-  },
-  {
-    id: 'bobr_family_trees_park_4',
-    name: 'Парк Семейных деревьев',
-    cat: 'Парк / Сквер',
-    lat: 53.193200,
-    lon: 29.228500,
-    dist: 0,
-    address: 'ул. Генерала Батова / ул. Сикорского',
-    rating: 4.8,
-    reviews_count: 53,
-    opening_hours: 'Круглосуточно',
-    tags: ['Зеленый сквер', 'Скамейки в тени', 'Пешеходные дорожки', 'Чистый воздух'],
-    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Парк Семейных деревьев Бобруйск'),
-    reviews: [],
-  },
-  {
-    id: 'bobr_shavabro_5',
-    name: 'Шава БРО',
-    cat: 'Фастфуд / Стритфуд',
-    lat: 53.194500,
-    lon: 29.218000,
-    dist: 0,
-    address: 'ул. Ульяновская, 66',
-    rating: 4.8,
-    reviews_count: 110,
-    opening_hours: 'Ежедневно 10:00 – 23:00',
-    tags: ['Шаурма и бургеры', 'Стритфуд', 'Оплата картой'],
-    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Шава БРО Бобруйск ул Ульяновская 66'),
-    reviews: [],
-  },
-  {
-    id: 'bobr_shavahouse_6',
-    name: 'Шава Хауз',
-    cat: 'Фастфуд / Стритфуд',
-    lat: 53.192800,
-    lon: 29.214000,
-    dist: 0,
-    address: 'ул. 50 лет ВЛКСМ, 108',
-    rating: 4.7,
-    reviews_count: 95,
-    opening_hours: 'Ежедневно 10:00 – 23:00',
-    tags: ['Стритфуд', 'Шаурма', 'Картофель фри'],
-    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Шава Хауз Бобруйск 50 лет ВЛКСМ 108'),
-    reviews: [],
-  },
-  {
-    id: 'bobr_molodezhny_park_7',
-    name: 'Молодежный парк',
-    cat: 'Парк / Сквер',
-    lat: 53.188000,
-    lon: 29.220000,
-    dist: 0,
-    address: 'проспект Строителей',
-    rating: 4.8,
-    reviews_count: 82,
-    opening_hours: 'Круглосуточно',
-    tags: ['Уютные аллеи', 'Скамейки', 'Прогулочная зона'],
-    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Молодежный парк Бобруйск'),
-    reviews: [],
-  },
-  {
-    id: 'bobr_cafe_pravda_8',
-    name: 'Кофейня Правда',
-    cat: 'Кофейня',
-    lat: 53.141500,
-    lon: 29.228000,
-    dist: 0,
-    address: 'ул. Минская, 25',
-    rating: 4.9,
-    reviews_count: 130,
-    opening_hours: 'Ежедневно 08:00 – 22:00',
-    tags: ['Свежий кофе', 'Уютная атмосфера', 'Десерты'],
-    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Кофейня Правда Бобруйск'),
-    reviews: [],
-  },
-];
-
+// Проверенные заведения удалены в пользу 100% живых данных из Яндекс Карт
 /**
  * Получение спутникового снимка Яндекс Карт высокого разрешения с маркером
  */
@@ -352,8 +229,8 @@ export async function fetchWikipediaPlacesAround(
           photos: photosList,
           satellite_url: getSatellitePhotoUrl(pLat, pLon),
           yandex_url: yandexSearchUrl,
-          rating: 4.8,
-          reviews_count: 85,
+          rating: undefined,
+          reviews_count: undefined,
           opening_hours: 'Открыто для осмотра',
           tags: getTagsForCategory('достопримечательность'),
           reviews: [],
@@ -595,8 +472,8 @@ async function searchYandexOrganizations(
             photos: photosList,
             satellite_url: getSatellitePhotoUrl(lat, lon),
             yandex_url: yandexUrl,
-            rating: meta?.rating ? Number(meta.rating.score) : 4.8,
-            reviews_count: meta?.rating ? meta.rating.reviewsCount : 45,
+            rating: meta?.rating ? Number(meta.rating.score) : undefined,
+            reviews_count: meta?.rating ? meta.rating.reviewsCount : undefined,
             opening_hours: hours,
             tags: getTagsForCategory(cat),
             reviews: [],
@@ -725,27 +602,13 @@ export async function fetchRealPlacesAround(
     candidatePool.push(c);
   };
 
-  // Если координаты находятся в Бобруйске (включая дом пользователя на Батова/Сикорского) — подключаем проверенные локации
-  const distToBobruisk = getCoordinatesDistance(startLat, startLon, 53.191294, 29.226132);
-  if (distToBobruisk < 15000) {
-    for (const vp of BOBRUISK_VERIFIED_PLACES) {
-      const d = getCoordinatesDistance(startLat, startLon, vp.lat, vp.lon);
-      if (d <= Math.max(1600, radiusMeters * 1.5)) {
-        addCandidate({
-          ...vp,
-          dist: d,
-        });
-      }
-    }
-  }
-
   const ymapsKeywords: string[] = [];
 
   if (actList.includes('fastfood')) {
-    ymapsKeywords.push('шаурма', 'шаурмичка', 'шаурмастер', 'фастфуд', 'бургерная', 'пиццерия', 'бистро', 'кафе');
+    ymapsKeywords.push('шаурма', 'фастфуд', 'бургерная', 'пиццерия', 'бистро');
   }
   if (actList.includes('coffee')) {
-    ymapsKeywords.push('кофейня', 'кофе', 'кондитерская');
+    ymapsKeywords.push('кофейня', 'кофе');
   }
   if (actList.includes('bakery')) {
     ymapsKeywords.push('пекарня', 'булочная', 'свежая выпечка');
@@ -754,22 +617,22 @@ export async function fetchRealPlacesAround(
     ymapsKeywords.push('мороженое', 'кондитерская', 'десерты');
   }
   if (actList.includes('views') || actList.includes('walk')) {
-    ymapsKeywords.push('бульвар', 'аллея', 'набережная', 'проспект', 'парк');
+    ymapsKeywords.push('бульвар', 'аллея', 'набережная', 'сквер');
   }
   if (actList.includes('nature') || actList.includes('dog_walk') || actList.includes('quiet')) {
     ymapsKeywords.push('парк', 'сквер', 'сад');
   }
   if (actList.includes('sights')) {
-    ymapsKeywords.push('достопримечательность', 'памятник', 'музей', 'собор');
+    ymapsKeywords.push('достопримечательность', 'памятник', 'музей');
   }
   if (actList.includes('shopping')) {
     ymapsKeywords.push('торговый центр', 'пассаж', 'галерея');
   }
   if (actList.includes('date')) {
-    ymapsKeywords.push('кофейня', 'бульвар', 'сквер', 'уютное кафе');
+    ymapsKeywords.push('кофейня', 'бульвар', 'уютное кафе');
   }
 
-  // ПРЯМОЙ УЧЕТ СТРОКИ "ЧТО ХОЧЕТСЯ?": извлекаем конкретные заведения и блюда в поисковые запросы
+  // ПРЯМОЙ УЧЕТ СТРОКИ "ЧТО ХОЧЕТСЯ?"
   if (customPrompt && customPrompt.trim().length > 0) {
     const cpLower = customPrompt.toLowerCase();
     const promptKeywords = [
@@ -779,15 +642,75 @@ export async function fetchRealPlacesAround(
       'памятник', 'собор', 'музей', 'храм', 'торговый центр', 'магазин'
     ];
     for (const pk of promptKeywords) {
-      if (cpLower.includes(pk)) {
-        if (!ymapsKeywords.includes(pk)) ymapsKeywords.unshift(pk);
+      if (cpLower.includes(pk) && !ymapsKeywords.includes(pk)) {
+        ymapsKeywords.unshift(pk);
       }
+    }
+    if (!ymapsKeywords.includes(customPrompt.trim())) {
+      ymapsKeywords.unshift(customPrompt.trim());
     }
   }
 
   if (ymapsKeywords.length === 0) {
-    ymapsKeywords.push('бульвар', 'парк', 'кофейня', 'шаурма');
+    ymapsKeywords.push('бульвар', 'парк', 'кофейня');
   }
+
+  // 1. ПРИОРИТЕТНЫЙ ШАГ: Получение 100% реальных данных напрямую из Яндекс Карт через эндпоинт /api/places/search
+  try {
+    const apiUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      ? 'http://localhost:8000/api/places/search'
+      : '/api/places/search';
+
+    const queriesToRun = ymapsKeywords.slice(0, 3);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const searchPromises = queriesToRun.map(async (kw) => {
+      try {
+        const resp = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lat: startLat,
+            lon: startLon,
+            query: kw,
+            radius_meters: radiusMeters,
+            limit: 10,
+          }),
+          signal: controller.signal,
+        });
+        if (resp.ok) {
+          const body = await resp.json();
+          if (body && Array.isArray(body.places)) {
+            for (const p of body.places) {
+              const d = getCoordinatesDistance(startLat, startLon, p.lat, p.lon);
+              addCandidate({
+                id: p.id,
+                name: p.name,
+                cat: p.category,
+                lat: p.lat,
+                lon: p.lon,
+                dist: d,
+                address: p.address,
+                photo_url: p.photo_url,
+                photos: p.photos || (p.photo_url ? [p.photo_url] : []),
+                satellite_url: getSatellitePhotoUrl(p.lat, p.lon),
+                yandex_url: p.yandex_url,
+                rating: p.rating,
+                reviews_count: p.reviews_count,
+                opening_hours: p.opening_hours,
+                tags: p.tags,
+                reviews: p.reviews || [],
+              });
+            }
+          }
+        }
+      } catch {}
+    });
+
+    await Promise.allSettled(searchPromises);
+    clearTimeout(timeoutId);
+  } catch {}
 
   // Запускаем поиск через сервисы Яндекс Карт и Википедию параллельно
   const [wikiRes, ymapsBizRes, ymapsStreetRes] = await Promise.allSettled([
@@ -838,7 +761,7 @@ export async function fetchRealPlacesAround(
 /**
  * Обогащение точки проверенными деталями
  */
-export function enrichStopWithRealDetails(stop: RouteStop, index: number): RouteStop {
+export function enrichStopWithRealDetails(stop: RouteStop, _index?: number): RouteStop {
   const satUrl = stop.satellite_url || getSatellitePhotoUrl(stop.lat, stop.lon);
   const tags = stop.tags || getTagsForCategory(stop.category);
   const openingHours =
@@ -864,7 +787,7 @@ export function enrichStopWithRealDetails(stop: RouteStop, index: number): Route
     satellite_url: satUrl,
     yandex_url: yandexUrl,
     tags,
-    reviews: [],
+    reviews: stop.reviews && stop.reviews.length > 0 ? stop.reviews : [],
     opening_hours: openingHours,
   };
 }

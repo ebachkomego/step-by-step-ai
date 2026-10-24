@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { RouteHistoryItem } from '../types';
-import { History, Trash2, RotateCcw, X, Star, Footprints, Coffee, Flag, Sparkles } from 'lucide-react';
+import { History, Trash2, RotateCcw, X, Star } from 'lucide-react';
 
 interface HistoryModalProps {
   isOpen: boolean;

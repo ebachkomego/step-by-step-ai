@@ -1,15 +1,43 @@
+export interface DesiredWaypoint {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  address?: string;
+  category?: string;
+  photo_url?: string;
+}
+
 export interface RouteRequest {
   start_lat: number;
   start_lon: number;
   duration_minutes: number;
   scenario: string;
   is_circular: boolean;
+  start_time?: string;
   end_lat?: number;
   end_lon?: number;
+  end_name?: string;
+  end_address?: string;
+  target_arrival_time?: string;
+  custom_prompt?: string;
+  activities?: string[];
+  stop_count?: number; // 0 = auto based on duration
   api_key?: string;
+  waypoints?: DesiredWaypoint[];
+}
+
+export interface PlaceReview {
+  id: string;
+  author: string;
+  rating: number;
+  date: string;
+  text: string;
+  avatar?: string;
 }
 
 export interface RouteStop {
+  id?: string;
   name: string;
   category: string;
   lat: number;
@@ -17,6 +45,19 @@ export interface RouteStop {
   spent_minutes: number;
   description: string;
   order: number;
+  address?: string;
+  rating?: number;
+  reviews_count?: number;
+  photo_url?: string;
+  satellite_url?: string;
+  photos?: string[];
+  yandex_url?: string;
+  arrival_time?: string;
+  departure_time?: string;
+  opening_hours?: string;
+  tags?: string[];
+  reviews?: PlaceReview[];
+  is_custom_waypoint?: boolean;
 }
 
 export interface RouteResponse {
@@ -36,12 +77,50 @@ export interface RouteResponse {
   scenario_title: string;
   used_ai: boolean;
   ai_model?: string;
+  ai_thought?: string;
   notes?: string;
+  start_time?: string;
+  arrival_time?: string;
+  is_circular?: boolean;
+  end_point?: {
+    lat: number;
+    lon: number;
+    name: string;
+    address?: string;
+  };
+  isFavorite?: boolean;
+}
+
+export interface WalkFormatItem {
+  id: string;
+  title: string;
+  icon: string;
 }
 
 export interface ScenarioItem {
   id: string;
   title: string;
   icon: string;
-  subtitle: string;
+  subtitle?: string;
 }
+
+export type MapLayerType = 'map' | 'satellite' | 'hybrid';
+
+export interface RouteHistoryItem {
+  id: string;
+  timestamp: number;
+  dateFormatted: string;
+  scenario_title: string;
+  scenario: string;
+  total_route_minutes: number;
+  total_walking_minutes: number;
+  total_distance_meters: number;
+  stopsCount: number;
+  stops: RouteStop[];
+  routeData: RouteResponse;
+  startLat: number;
+  startLon: number;
+  custom_prompt?: string;
+  isFavorite?: boolean;
+}
+

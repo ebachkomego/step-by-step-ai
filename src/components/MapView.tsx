@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import type { RouteResponse, RouteStop, MapLayerType } from '../types';
-import { Layers, Plus, Minus, Navigation, Flag, X } from 'lucide-react';
+import { Layers, Plus, Minus, Navigation, Flag } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -15,6 +15,7 @@ interface MapViewProps {
   endLat?: number | null;
   endLon?: number | null;
   endName?: string;
+  endAddress?: string;
   userLat: number | null;
   userLon: number | null;
   routeData: RouteResponse | null;
@@ -39,6 +40,7 @@ export const MapView: React.FC<MapViewProps> = ({
   endLat = null,
   endLon = null,
   endName,
+  endAddress: _endAddress,
   userLat,
   userLon,
   routeData,

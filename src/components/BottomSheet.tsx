@@ -36,6 +36,7 @@ interface BottomSheetProps {
   endLat?: number | null;
   endLon?: number | null;
   endName?: string;
+  endAddress?: string;
   onClearEndPoint?: () => void;
   onStartPickingEndLocation?: () => void;
   isPickingEndLocation?: boolean;
@@ -158,6 +159,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   endLat = null,
   endLon = null,
   endName,
+  endAddress: _endAddress,
   onClearEndPoint,
   onStartPickingEndLocation,
   isPickingEndLocation = false,

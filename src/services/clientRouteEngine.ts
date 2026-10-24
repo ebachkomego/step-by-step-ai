@@ -3,8 +3,6 @@ import {
   fetchRealPlacesAround,
   enrichStopWithRealDetails,
   getCoordinatesDistance,
-  reverseGeocodeLocation,
-  getSatellitePhotoUrl,
   type RealPOICandidate,
 } from './realPlacesService';
 
@@ -877,8 +875,8 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
       address: w.address,
       photo_url: w.photo_url,
       photos: w.photo_url ? [w.photo_url] : [],
-      rating: 4.9,
-      reviews_count: 120,
+      rating: undefined,
+      reviews_count: undefined,
       opening_hours: 'Открыто для посещения',
       tags: ['Выбранная вами точка', 'Посетить по пути'],
       is_custom_waypoint: true,
@@ -947,7 +945,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
             reviews_count: match.reviews_count,
             opening_hours: match.opening_hours,
             tags: match.tags,
-            reviews: [],
+            reviews: match.reviews || [],
             t: match.t,
           });
         }
@@ -1045,7 +1043,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
         reviews_count: item.reviews_count,
         opening_hours: item.opening_hours,
         tags: item.tags,
-        reviews: [],
+        reviews: item.reviews || [],
         t: item.t,
       });
     }

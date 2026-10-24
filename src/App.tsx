@@ -6,7 +6,7 @@ import { HistoryModal } from './components/HistoryModal';
 import { CitySearchBar } from './components/CitySearchBar';
 import { PlaceDetailsModal } from './components/PlaceDetailsModal';
 import type { RouteRequest, RouteResponse, MapLayerType, RouteHistoryItem, RouteStop, DesiredWaypoint } from './types';
-import { Sun, Moon, Navigation, AlertCircle, History, Layers } from 'lucide-react';
+import { Sun, Moon, AlertCircle, History } from 'lucide-react';
 import { generateRouteClientFallback } from './services/clientRouteEngine';
 
 export const App: React.FC = () => {
@@ -468,6 +468,7 @@ export const App: React.FC = () => {
         endLat={endLat}
         endLon={endLon}
         endName={endName}
+        endAddress={endAddress}
         userLat={userLat}
         userLon={userLon}
         routeData={routeData}
@@ -561,6 +562,7 @@ export const App: React.FC = () => {
         endLat={endLat}
         endLon={endLon}
         endName={endName}
+        endAddress={endAddress}
         onClearEndPoint={handleClearEndPoint}
         onStartPickingEndLocation={() => setIsPickingEndLocation(true)}
         isPickingEndLocation={isPickingEndLocation}
