@@ -642,7 +642,8 @@ export async function fetchRealPlacesAround(
   startLat: number,
   startLon: number,
   radiusMeters: number = 1000,
-  preferredActivities: string[] = []
+  preferredActivities: string[] = [],
+  customPrompt?: string
 ): Promise<RealPOICandidate[]> {
   const candidatePool: RealPOICandidate[] = [];
   const seenNames = new Set<string>();
@@ -694,6 +695,23 @@ export async function fetchRealPlacesAround(
   if (actList.includes('date')) {
     nomKeywords.push('кофейня', 'бульвар', 'сквер');
     ymapsKeywords.push('кофейня', 'бульвар');
+  }
+
+  // ПРЯМОЙ УЧЕТ СТРОКИ "ЧТО ХОЧЕТСЯ?": извлекаем конкретные заведения и блюда в поисковые запросы
+  if (customPrompt && customPrompt.trim().length > 0) {
+    const cpLower = customPrompt.toLowerCase();
+    const promptKeywords = [
+      'шаурма', 'шаверма', 'донер', 'бургер', 'kfc', 'кфс', 'пицца', 'пиццерия', 'драники', 'чебурек',
+      'кофе', 'кофейня', 'латте', 'капучино', 'раф', 'выпечка', 'пекарня', 'круассан', 'булочная',
+      'мороженое', 'десерт', 'парк', 'сквер', 'набережная', 'бульвар', 'аллея',
+      'памятник', 'собор', 'музей', 'храм', 'торговый центр', 'магазин'
+    ];
+    for (const pk of promptKeywords) {
+      if (cpLower.includes(pk)) {
+        if (!nomKeywords.includes(pk)) nomKeywords.unshift(pk);
+        if (!ymapsKeywords.includes(pk)) ymapsKeywords.unshift(pk);
+      }
+    }
   }
 
   if (nomKeywords.length === 0) {

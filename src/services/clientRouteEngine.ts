@@ -8,42 +8,42 @@ import {
 
 export const SCENARIOS_INFO: Record<string, { title: string; defaultActivities: string[]; desc: string }> = {
   walk: {
-    title: 'Пешая прогулка',
+    title: 'Прогулка',
     defaultActivities: ['walk', 'views'],
     desc: 'Пеший маршрут через красивые бульвары, набережные и открытые виды',
   },
   sights: {
-    title: 'Достопримечательности',
+    title: 'Памятники',
     defaultActivities: ['sights', 'walk'],
-    desc: 'Архитектура, памятники, исторические соборы и городские тайны',
+    desc: 'Архитектура, памятники, исторические соборы и городские достопримечательности',
   },
   coffee: {
-    title: 'За кофе',
+    title: 'Кофе',
     defaultActivities: ['coffee', 'views'],
     desc: 'Лучшие кофейни, кофе с собой, десерты и уютные посадки',
   },
   fastfood: {
-    title: 'Фастфуд и стритфуд',
+    title: 'Фастфуд',
     defaultActivities: ['fastfood', 'walk'],
-    desc: 'Сочная шаурма, бургеры, пицца, KFC и аппетитный уличный перекус',
+    desc: 'Сочная шаурма, бургеры, пицца, KFC и аппетитный перекус',
   },
   views: {
-    title: 'Красивые виды',
+    title: 'Виды',
     defaultActivities: ['views', 'walk'],
     desc: 'Смотровые площадки, панорамы, широкие бульвары и набережные',
   },
   nature: {
-    title: 'Природа и парки',
+    title: 'Парки',
     defaultActivities: ['nature', 'walk'],
     desc: 'Тенистые аллеи, скверы, парки, пруды и чистый воздух',
   },
   bakery: {
-    title: 'Пекарни и выпечка',
+    title: 'Пекарни',
     defaultActivities: ['bakery', 'coffee'],
     desc: 'Свежая выпечка, хрустящие круассаны и уютные булочные',
   },
   date: {
-    title: 'Романтическое свидание',
+    title: 'Свидание',
     defaultActivities: ['date', 'coffee', 'views'],
     desc: 'Уютная атмосфера, вечерние огни, десерты и неспешное общение',
   },
@@ -53,28 +53,28 @@ export const SCENARIOS_INFO: Record<string, { title: string; defaultActivities: 
     desc: 'Просторные парки, зеленые аллеи и площадки вдали от дорог',
   },
   shopping: {
-    title: 'Магазины и ТЦ',
+    title: 'Магазины',
     defaultActivities: ['shopping', 'walk'],
     desc: 'Оживленные улицы с витринами, торговые центры и галереи',
   },
   quiet: {
-    title: 'Тихий отдых',
+    title: 'Тишина',
     defaultActivities: ['quiet', 'nature'],
     desc: 'Уединенные малолюдные аллеи и скамейки для спокойных бесед',
   },
   sweets: {
-    title: 'Сладкое и мороженое',
+    title: 'Сладкое',
     defaultActivities: ['sweets', 'coffee'],
     desc: 'Джелато, авторские десерты и кондитерские лавки',
   },
   // Совместимость со старыми ключами
   tourist: {
-    title: 'Пешая прогулка',
+    title: 'Прогулка',
     defaultActivities: ['walk', 'views'],
     desc: 'Красивые места города',
   },
   coffee_walk: {
-    title: 'За кофе',
+    title: 'Кофе',
     defaultActivities: ['coffee', 'views'],
     desc: 'Кофейни и аллеи',
   },
@@ -503,11 +503,13 @@ async function planRouteWithAI(
 СТРОГИЕ ПРАВИЛА:
 1. ПОЖЕЛАНИЯ И ФОРМАТЫ: Пользователь выбрал: "${formatNames}".
    - "Прогулка" — это пеший маршрут через красивые бульвары, набережные и открытые виды (БЕЗ обязательной истории/архитектуры!).
-   - "Достопримечательности" — архитектура, памятники, исторические здания, соборы, музеи.
-   - "Фастфуд" — шаурма, бургеры, пиццерии, стритфуд, KFC.
-   - "Кофейни" — кофе на вынос, спешелти кофейни, десерты.
-   - "Красивые виды" — бульвары, панорамы, набережные.
-   - "Природа" — парки, скверы, аллеи.
+   - "Памятники" — архитектура, памятники, исторические здания, соборы, музеи.
+   - "Фастфуд" — сочная шаурма, бургеры, пиццерии, стритфуд, KFC.
+   - "Кофе" — кофе на вынос, спешелти кофейни, десерты.
+   - "Виды" — открытые смотровые виды, бульвары, панорамы, набережные.
+   - "Парки" — зеленые парки, скверы, аллеи.
+   - "Пекарни" — свежая выпечка, круассаны, булочные.
+   - "Сладкое" — кондитерские, мороженое, десерты.
 2. В 'scenario_title' ОБЯЗАТЕЛЬНО придумай уникальное, вдохновляющее и красивое название прогулки на русском языке (3-6 слов) исходя из остановок, форматов и конечной точки!
    Примеры отличных названий:
    - "Вкусный стритфуд и вечерний променад к ФОК Техас"
@@ -684,8 +686,8 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
 
   const acts = activities.length > 0 ? activities : [scenario || 'walk'];
 
-  // Поиск реальных проверенных мест под выбранные форматы
-  let realPlaces = await fetchRealPlacesAround(searchCenterLat, searchCenterLon, radius, acts);
+  // Поиск реальных проверенных мест под выбранные форматы с учетом пожелания пользователя
+  let realPlaces = await fetchRealPlacesAround(searchCenterLat, searchCenterLon, radius, acts, custom_prompt);
 
   let corridorCandidates: (RealPOICandidate & { t: number; lateralMeters: number; group: CategoryGroup })[] = [];
 
@@ -829,6 +831,18 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     const existingNames = new Set(selectedStops.map((s) => s.name.toLowerCase()));
     let remaining = parsedPois.filter((p) => !existingNames.has(p.name.toLowerCase()));
 
+    // Ключевые слова из пользовательского пожелания в строке "Что хочется?"
+    const promptKeywords = (custom_prompt || '')
+      .toLowerCase()
+      .split(/[\s,.;:!?]+/)
+      .filter((w) => w.length >= 3 && !['хочу', 'очень', 'было', 'будет', 'надо', 'нужно', 'легкую', 'вкусный'].includes(w));
+
+    const matchesPrompt = (item: { name: string; cat: string; tags?: string[] }) => {
+      if (promptKeywords.length === 0) return false;
+      const combined = `${item.name} ${item.cat} ${(item.tags || []).join(' ')}`.toLowerCase();
+      return promptKeywords.some((kw) => combined.includes(kw));
+    };
+
     // Приоритетные группы из выбранных форматов
     const desiredGroups: CategoryGroup[] = [];
     if (acts.includes('fastfood')) desiredGroups.push('fastfood');
@@ -843,16 +857,23 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     while (selectedStops.length < targetStopCount && remaining.length > 0) {
       let candidateIdx = -1;
 
-      // Ищем место из форматов, которые еще не представлены
-      for (const dg of desiredGroups) {
-        const hasGroup = selectedStops.some((s) => getCategoryGroup(s.category) === dg);
-        if (!hasGroup) {
-          candidateIdx = remaining.findIndex((r) => r.group === dg);
-          if (candidateIdx !== -1) break;
+      // 1. Сначала ищем места, напрямую упомянутые пользователем в строке "Что хочется?"
+      if (promptKeywords.length > 0) {
+        candidateIdx = remaining.findIndex((r) => matchesPrompt(r));
+      }
+
+      // 2. Затем ищем место из форматов, которые еще не представлены на маршруте
+      if (candidateIdx === -1) {
+        for (const dg of desiredGroups) {
+          const hasGroup = selectedStops.some((s) => getCategoryGroup(s.category) === dg);
+          if (!hasGroup) {
+            candidateIdx = remaining.findIndex((r) => r.group === dg);
+            if (candidateIdx !== -1) break;
+          }
         }
       }
 
-      // Если все желаемые уже представлены, берем не-еду (чтобы не дублировать фастфуд/кофе)
+      // 3. Если все желаемые уже представлены, берем не-еду (чтобы не дублировать фастфуд/кофе)
       if (candidateIdx === -1) {
         candidateIdx = remaining.findIndex((r) => r.group !== 'fastfood' && r.group !== 'coffee');
       }

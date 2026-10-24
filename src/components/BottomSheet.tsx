@@ -58,21 +58,72 @@ interface BottomSheetProps {
   onToggleFavorite?: () => void;
 }
 
-// Единый полный список форматов прогулки (без мелких подписей, с разделением на кофейни, фастфуд, виды, природу и т.д.)
-const WALK_FORMATS = [
+// Единый полный список форматов прогулки (лаконичные названия без переполнения кнопок)
+export const WALK_FORMATS = [
   { id: 'walk', title: 'Прогулка', icon: Footprints },
-  { id: 'sights', title: 'Достопримечательности', icon: Landmark },
-  { id: 'coffee', title: 'Кофейни', icon: Coffee },
-  { id: 'fastfood', title: 'Фастфуд и стритфуд', icon: UtensilsCrossed },
-  { id: 'views', title: 'Красивые виды', icon: Camera },
-  { id: 'nature', title: 'Природа и парки', icon: Trees },
-  { id: 'bakery', title: 'Пекарни и выпечка', icon: Croissant },
+  { id: 'sights', title: 'Памятники', icon: Landmark },
+  { id: 'coffee', title: 'Кофе', icon: Coffee },
+  { id: 'fastfood', title: 'Фастфуд', icon: UtensilsCrossed },
+  { id: 'views', title: 'Виды', icon: Camera },
+  { id: 'nature', title: 'Парки', icon: Trees },
+  { id: 'bakery', title: 'Пекарни', icon: Croissant },
   { id: 'date', title: 'Свидание', icon: Heart },
   { id: 'dog_walk', title: 'С собакой', icon: Dog },
-  { id: 'shopping', title: 'Магазины и ТЦ', icon: ShoppingBag },
-  { id: 'quiet', title: 'Тихий отдых', icon: Armchair },
-  { id: 'sweets', title: 'Сладкое и мороженое', icon: IceCream },
+  { id: 'shopping', title: 'Магазины', icon: ShoppingBag },
+  { id: 'quiet', title: 'Тишина', icon: Armchair },
+  { id: 'sweets', title: 'Сладкое', icon: IceCream },
 ];
+
+/**
+ * Распознает нужные форматы прогулки из произвольного текста пользователя
+ * Например: "хочу вкусный кофе и легкую прогулку" -> ['coffee', 'walk']
+ */
+export function detectFormatsFromText(text: string): string[] {
+  if (!text || !text.trim()) return [];
+  const lower = text.toLowerCase();
+  const detected: string[] = [];
+
+  const matchAny = (keywords: string[]) => keywords.some((kw) => lower.includes(kw));
+
+  if (matchAny(['прогулк', 'погулять', 'пройтись', 'пешком', 'променад', 'походить', 'шаг'])) {
+    detected.push('walk');
+  }
+  if (matchAny(['достопримеч', 'памятник', 'мемориал', 'музей', 'храм', 'собор', 'церков', 'костел', 'архитектур', 'истор', 'старин'])) {
+    detected.push('sights');
+  }
+  if (matchAny(['кофе', 'кофейн', 'капучино', 'латте', 'эспрессо', 'раф', 'американо', 'чай', 'coffee'])) {
+    detected.push('coffee');
+  }
+  if (matchAny(['фастфуд', 'шаурм', 'шаверм', 'донер', 'бургер', 'кфс', 'kfc', 'пицц', 'стритфуд', 'макдональдс', 'чебурек', 'хот-дог', 'хотдог', 'картошк', 'фри', 'наггетс', 'бк', 'перекус', 'поесть', 'закусочн'])) {
+    detected.push('fastfood');
+  }
+  if (matchAny(['вид', 'видов', 'виды', 'панорам', 'смотров', 'набережн', 'бульвар', 'закат', 'красив'])) {
+    detected.push('views');
+  }
+  if (matchAny(['парк', 'природ', 'сквер', 'зелен', 'лес', 'пруд', 'озер', 'река', 'алле', 'дерев'])) {
+    detected.push('nature');
+  }
+  if (matchAny(['пекарн', 'выпечк', 'булочк', 'булочн', 'круассан', 'пирож', 'булк', 'хлеб'])) {
+    detected.push('bakery');
+  }
+  if (matchAny(['свидан', 'романтик', 'девушк', 'парен', 'любов'])) {
+    detected.push('date');
+  }
+  if (matchAny(['собак', 'пес', 'псом', 'щен', 'питом', 'дог'])) {
+    detected.push('dog_walk');
+  }
+  if (matchAny(['магазин', 'шопинг', 'тц', 'покупк', 'витрин', 'молл'])) {
+    detected.push('shopping');
+  }
+  if (matchAny(['тишин', 'тих', 'спокойн', 'уединен', 'малолюд', 'тихий'])) {
+    detected.push('quiet');
+  }
+  if (matchAny(['сладк', 'морожен', 'десерт', 'пирожн', 'торт', 'джелато', 'шоколад', 'конфет', 'кондитер'])) {
+    detected.push('sweets');
+  }
+
+  return detected;
+}
 
 const TIME_CHIPS = [
   { label: '30м', value: 30 },
@@ -87,11 +138,11 @@ const TIME_CHIPS = [
 ];
 
 const QUICK_PROMPT_IDEAS = [
+  'Вкусный кофе и легкая прогулка',
   'Горячая шаурма и тихий сквер',
   'Уютная кофейня и красивые виды',
   'Пекарня со свежими круассанами',
   'Смотровые площадки и набережная',
-  'Вдоль центрального бульвара',
 ];
 
 function getNowTimeStr(): string {
@@ -243,6 +294,22 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         return [...prev, id];
       }
     });
+  };
+
+  const handleCustomPromptChange = (newVal: string) => {
+    setCustomPrompt(newVal);
+    const detected = detectFormatsFromText(newVal);
+    if (detected.length > 0) {
+      setSelectedFormats((prev) => Array.from(new Set([...prev, ...detected])));
+    }
+  };
+
+  const handleSelectPromptIdea = (idea: string) => {
+    setCustomPrompt(idea);
+    const detected = detectFormatsFromText(idea);
+    if (detected.length > 0) {
+      setSelectedFormats(detected);
+    }
   };
 
   const effectiveStops = calculateStopCount(duration, manualStopCount);
@@ -405,14 +472,14 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                 <input
                   type="text"
                   value={customPrompt}
-                  onChange={(e) => setCustomPrompt(e.target.value)}
-                  placeholder="Что хочется? Вкусная шаурма, тихий парк, красивые виды..."
+                  onChange={(e) => handleCustomPromptChange(e.target.value)}
+                  placeholder="Что хочется? Вкусный кофе, шаурма, парк, красивые виды..."
                   className="w-full text-sm pl-10 pr-9 py-3 bg-neutral-100 dark:bg-neutral-800/80 border border-transparent focus:border-amber-400 rounded-2xl text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none transition-all font-medium"
                 />
                 {customPrompt && (
                   <button
                     type="button"
-                    onClick={() => setCustomPrompt('')}
+                    onClick={() => handleCustomPromptChange('')}
                     className="absolute right-3 text-neutral-400 hover:text-neutral-700 dark:hover:text-white text-sm cursor-pointer p-1"
                   >
                     ✕
@@ -426,7 +493,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   <button
                     key={idea}
                     type="button"
-                    onClick={() => setCustomPrompt(idea)}
+                    onClick={() => handleSelectPromptIdea(idea)}
                     className="text-xs px-3 py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-amber-100 hover:text-amber-900 dark:hover:bg-neutral-700 whitespace-nowrap transition-colors cursor-pointer font-medium"
                   >
                     {idea}
@@ -491,7 +558,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                       key={fmt.id}
                       type="button"
                       onClick={() => toggleFormat(fmt.id)}
-                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                      className={`p-2.5 sm:p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-2 min-w-0 ${
                         active
                           ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 border-neutral-900 shadow-md ring-2 ring-amber-400'
                           : 'bg-neutral-50 dark:bg-neutral-800/80 text-neutral-800 dark:text-neutral-200 border-neutral-200/80 dark:border-neutral-700 hover:border-neutral-300'
@@ -506,7 +573,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                       >
                         <Icon className="w-4 h-4" />
                       </div>
-                      <span className="font-extrabold text-xs md:text-sm leading-tight select-none">
+                      <span className="font-extrabold text-xs sm:text-sm leading-tight select-none truncate">
                         {fmt.title}
                       </span>
                     </button>
