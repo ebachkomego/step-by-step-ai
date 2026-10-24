@@ -63,6 +63,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const endPlacemarkRef = useRef<any>(null);
   const routeCollectionRef = useRef<any>(null);
   const isLoadedRef = useRef<boolean>(false);
+  const lastRenderedRouteIdRef = useRef<any>(null);
 
   const isPickingEndRef = useRef(isPickingEndLocation);
   isPickingEndRef.current = isPickingEndLocation;
@@ -86,8 +87,8 @@ export const MapView: React.FC<MapViewProps> = ({
     };
   }, [routeData, onSelectStop, onOpenPlaceDetails]);
 
-  // Хелпер применения типа карты (Схема, Спутник, Гибрид, Схема темная)
-  const applyMapType = (map: any, type: MapLayerType, dark: boolean) => {
+  // Хелпер применения типа карты (Схема, Спутник, Гибрид)
+  const applyMapType = (map: any, type: MapLayerType, _dark: boolean) => {
     if (!map || !window.ymaps) return;
 
     try {
@@ -96,31 +97,8 @@ export const MapView: React.FC<MapViewProps> = ({
       } else if (type === 'hybrid') {
         map.setType('yandex#hybrid');
       } else {
-        if (dark) {
-          try {
-            if (window.ymaps.layer && window.ymaps.layer.storage) {
-              if (!window.ymaps.layer.storage.get('custom#dark')) {
-                window.ymaps.layer.storage.add('custom#dark', function () {
-                  return new window.ymaps.Layer(
-                    'https://core-renderer-tiles.maps.yandex.net/tiles?l=map&theme=dark&%c&%l',
-                    { tileTransparent: false }
-                  );
-                });
-                window.ymaps.mapType.storage.add(
-                  'custom#dark',
-                  new window.ymaps.MapType('Схема (темная)', ['custom#dark'])
-                );
-              }
-              map.setType('custom#dark');
-              return;
-            }
-          } catch (layerErr) {
-            console.warn('Native dark layer registration fallback:', layerErr);
-          }
-          map.setType('yandex#map');
-        } else {
-          map.setType('yandex#map');
-        }
+        // Стандартная надежная схема Яндекс Карт с полной доступностью тайлов во всех городах
+        map.setType('yandex#map');
       }
     } catch (e) {
       console.warn('Could not set map type:', e);
@@ -431,6 +409,7 @@ export const MapView: React.FC<MapViewProps> = ({
             : 'islands#blackCircleIcon',
           iconColor: isActive ? '#fc3f1d' : stop.is_custom_waypoint ? '#10b981' : '#222222',
           balloonCloseButton: true,
+          balloonAutoPan: false,
         }
       );
 
@@ -445,6 +424,9 @@ export const MapView: React.FC<MapViewProps> = ({
         stopPlacemark.balloon.open();
       }
     });
+
+    const isNewRoute = lastRenderedRouteIdRef.current !== data;
+    lastRenderedRouteIdRef.current = data;
 
     // Пешеходная линия GeoJSON
     if (data.geojson?.geometry?.coordinates) {
@@ -465,26 +447,31 @@ export const MapView: React.FC<MapViewProps> = ({
 
       collection.add(polyline);
 
-      const bounds = polyline.geometry.getBounds();
-      if (bounds && bounds.length === 2) {
-        const p1 = bounds[0];
-        const p2 = bounds[1];
-        const deltaLat = Math.abs(p1[0] - p2[0]);
-        const deltaLon = Math.abs(p1[1] - p2[1]);
-        // Если точки слишком близко друг к другу (например < 150м), центрируем с безопасным зумом 15
-        if (deltaLat < 0.0015 && deltaLon < 0.0015) {
-          map.setCenter(p1, 15, { duration: 500 });
-        } else {
-          map.setBounds(bounds, {
-            checkZoomRange: true,
-            zoomMargin: [60, 20, 260, 20],
-            duration: 500,
-          }).then(() => {
-            try {
-              if (map.getZoom() > 16) map.setZoom(16);
-            } catch (_) {}
-          });
+      if (isNewRoute) {
+        const bounds = polyline.geometry.getBounds();
+        if (bounds && bounds.length === 2) {
+          const p1 = bounds[0];
+          const p2 = bounds[1];
+          const deltaLat = Math.abs(p1[0] - p2[0]);
+          const deltaLon = Math.abs(p1[1] - p2[1]);
+          // Если точки слишком близко друг к другу (например < 150м), центрируем с безопасным зумом 15
+          if (deltaLat < 0.0015 && deltaLon < 0.0015) {
+            map.setCenter(p1, 15, { duration: 500 });
+          } else {
+            map.setBounds(bounds, {
+              checkZoomRange: true,
+              zoomMargin: [60, 20, 260, 20],
+              duration: 500,
+            }).then(() => {
+              try {
+                if (map.getZoom() > 16) map.setZoom(16);
+              } catch (_) {}
+            });
+          }
         }
+      } else if (activeStopIndex !== null && data?.stops?.[activeStopIndex]) {
+        const targetStop = data.stops[activeStopIndex];
+        map.panTo([targetStop.lat, targetStop.lon], { duration: 350, flying: true });
       }
     }
   };

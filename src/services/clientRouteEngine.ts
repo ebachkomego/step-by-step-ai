@@ -702,20 +702,26 @@ export async function buildYandexPedestrianRoute(
             const geoCoords: [number, number][] = [];
             const paths = activeRoute.getPaths();
             if (paths) {
-              paths.forEach((path: any) => {
-                const segments = path.getSegments();
-                if (segments) {
-                  segments.forEach((seg: any) => {
-                    const segPts = seg.getCoordinates();
-                    if (Array.isArray(segPts)) {
-                      segPts.forEach((pt: [number, number]) => {
-                        // GeoJSON standard: [lon, lat]
+              const pCount = typeof paths.getLength === 'function' ? paths.getLength() : (paths.length || 0);
+              for (let i = 0; i < pCount; i++) {
+                const path = typeof paths.get === 'function' ? paths.get(i) : paths[i];
+                if (!path) continue;
+                const segments = path.getSegments ? path.getSegments() : [];
+                const sCount = typeof segments.getLength === 'function' ? segments.getLength() : (segments.length || 0);
+                for (let j = 0; j < sCount; j++) {
+                  const seg = typeof segments.get === 'function' ? segments.get(j) : segments[j];
+                  if (!seg) continue;
+                  const segPts = seg.geometry?.getCoordinates ? seg.geometry.getCoordinates() : null;
+                  if (Array.isArray(segPts)) {
+                    for (const pt of segPts) {
+                      if (Array.isArray(pt) && pt.length >= 2) {
+                        // Конвертация [lat, lon] в [lon, lat] для стандарта GeoJSON
                         geoCoords.push([pt[1], pt[0]]);
-                      });
+                      }
                     }
-                  });
+                  }
                 }
-              });
+              }
             }
 
             if (geoCoords.length > 0) {
@@ -1045,107 +1051,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     }
   }
 
-  // 4. ГАРАНТИЯ НАЛИЧИЯ ОСТАНОВОК ДЛЯ СВЯЗНОГО КРУГОВОГО И ПЕШЕХОДНОГО МАРШРУТА
-  // Если заведений в районе мало, формируем связный полигон круговой прогулки по реальным улицам
-  if (effectiveIsCircular && selectedStops.length < targetStopCount) {
-    const needed = targetStopCount - selectedStops.length;
-    const targetWalkDist = Math.min(6500, Math.max(1600, duration_minutes * 60));
-    const loopRadius = Math.min(750, Math.max(340, Math.round(targetWalkDist / 8)));
-
-    const geoPromises: Promise<{
-      lat: number;
-      lon: number;
-      streetName: string;
-      fullAddress: string;
-      category: string;
-      angleIndex: number;
-    }>[] = [];
-
-    for (let k = 0; k < needed; k++) {
-      const slotIndex = selectedStops.length + k;
-      const angle = (2 * Math.PI * slotIndex) / Math.max(3, targetStopCount) + Math.PI / 4;
-      const latOffset = (loopRadius / 111132) * Math.cos(angle);
-      const lonOffset = (loopRadius / (111320 * Math.cos((start_lat * Math.PI) / 180))) * Math.sin(angle);
-      const bLat = start_lat + latOffset;
-      const bLon = start_lon + lonOffset;
-
-      geoPromises.push(
-        reverseGeocodeLocation(bLat, bLon).then((loc) => ({
-          lat: bLat,
-          lon: bLon,
-          streetName: loc.streetName,
-          fullAddress: loc.fullAddress,
-          category: loc.category,
-          angleIndex: slotIndex,
-        }))
-      );
-    }
-
-    const resolvedStops = await Promise.all(geoPromises);
-
-    for (const r of resolvedStops) {
-      const cleanStreet = r.streetName.replace(/^вуліца\s+/i, 'ул. ').replace(/^улица\s+/i, 'ул. ');
-      const stopTitle = `Променад: ${cleanStreet}`;
-
-      selectedStops.push({
-        id: `circular_street_${r.angleIndex}_${Date.now()}`,
-        name: stopTitle,
-        category: r.category,
-        lat: r.lat,
-        lon: r.lon,
-        spent_minutes: defaultSpentPerStop,
-        description: `Живописный пешеходный участок круговой прогулки вдоль ${cleanStreet}.`,
-        order: 0,
-        address: r.fullAddress,
-        photo_url: undefined,
-        photos: [],
-        satellite_url: getSatellitePhotoUrl(r.lat, r.lon),
-        yandex_url: `https://yandex.ru/maps/?text=${encodeURIComponent(r.fullAddress)}`,
-        rating: 4.8,
-        reviews_count: 35,
-        opening_hours: 'Круглосуточно для прогулок',
-        tags: ['Пешеходная часть маршрута', 'Уютная улица', 'Без частного сектора'],
-        reviews: [],
-        t: (r.angleIndex + 1) / (targetStopCount + 1),
-      });
-    }
-  } else if (hasEndPoint && selectedStops.length < targetStopCount && end_lat !== undefined && end_lon !== undefined) {
-    const needed = targetStopCount - selectedStops.length;
-    for (let k = 0; k < needed; k++) {
-      const slotIndex = selectedStops.length + k;
-      const tTarget = (slotIndex + 1) / (targetStopCount + 1);
-      const bLat = start_lat + tTarget * (end_lat - start_lat);
-      const bLon = start_lon + tTarget * (end_lon - start_lon);
-
-      const loc = await reverseGeocodeLocation(bLat, bLon);
-      const cleanStreet = loc.streetName.replace(/^вуліца\s+/i, 'ул. ').replace(/^улица\s+/i, 'ул. ');
-      const stopTitle = `Променад к цели: ${cleanStreet}`;
-
-      selectedStops.push({
-        id: `corridor_street_${slotIndex}_${Date.now()}`,
-        name: stopTitle,
-        category: loc.category,
-        lat: bLat,
-        lon: bLon,
-        spent_minutes: defaultSpentPerStop,
-        description: `Пешеходный променад вдоль ${cleanStreet} по направлению к точке финиша.`,
-        order: 0,
-        address: loc.fullAddress,
-        photo_url: undefined,
-        photos: [],
-        satellite_url: getSatellitePhotoUrl(bLat, bLon),
-        yandex_url: `https://yandex.ru/maps/?text=${encodeURIComponent(loc.fullAddress)}`,
-        rating: 4.8,
-        reviews_count: 40,
-        opening_hours: 'Круглосуточно для прогулок',
-        tags: ['По пути к финишу', 'Уютная улица'],
-        reviews: [],
-        t: tTarget,
-      });
-    }
-  }
-
-  // 5. ГЕОМЕТРИЧЕСКАЯ ОПТИМИЗАЦИЯ ПОРЯДКА ДВИЖЕНИЯ (только реальные проверенные места)
+  // 4. ГЕОМЕТРИЧЕСКАЯ ОПТИМИЗАЦИЯ ПОРЯДКА ДВИЖЕНИЯ (только реальные проверенные места)
   let orderedStops: RouteStop[] = [];
   if (hasEndPoint && end_lat !== undefined && end_lon !== undefined) {
     orderedStops = orderCorridorStops(start_lat, start_lon, end_lat, end_lon, selectedStops);
@@ -1169,7 +1075,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     return enriched;
   });
 
-  // 6. Построение пешеходного трека через Яндекс Карты (MultiRoute pedestrian)
+  // 5. Построение пешеходного трека через Яндекс Карты (MultiRoute pedestrian)
   const coords: [number, number][] = [[start_lon, start_lat]];
   for (const s of enrichedStops) {
     coords.push([s.lon, s.lat]);
@@ -1193,6 +1099,32 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     }
   } catch (e) {
     console.warn('Yandex pedestrian route calculation error:', e);
+  }
+
+  // Резервный пешеходный трек по тротуарам (OSRM foot) если Яндекс MultiRoute недоступен, чтобы трек НИКОГДА не шел сквозь дома
+  if (!geojson) {
+    try {
+      const coordsStr = coords.map((c) => `${c[0].toFixed(6)},${c[1].toFixed(6)}`).join(';');
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 3500);
+      const resp = await fetch(
+        `https://routing.openstreetmap.de/routed-foot/route/v1/foot/${coordsStr}?overview=full&geometries=geojson`,
+        { signal: controller.signal }
+      );
+      clearTimeout(tId);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.routes && data.routes.length > 0) {
+          const r = data.routes[0];
+          distanceMeters = Math.round(r.distance);
+          walkingMinutes = Math.max(1, Math.round(r.duration / 60));
+          geojson = {
+            type: 'Feature',
+            geometry: r.geometry,
+          };
+        }
+      }
+    } catch {}
   }
 
   if (!geojson) {

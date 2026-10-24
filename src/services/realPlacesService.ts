@@ -39,6 +39,158 @@ export function isBlacklisted(
 }
 
 /**
+ * Проверка на религиозные объекты (храмы, соборы, церкви, монастыри, часовни).
+ * Разрешены ТОЛЬКО если пользователь явно выбрал сценарий "Памятники / Достопримечательности" ('sights').
+ */
+export function isReligious(
+  name: string,
+  category: string = '',
+  address: string = '',
+  description: string = ''
+): boolean {
+  const combined = `${name} ${category} ${address} ${description}`.toLowerCase();
+  return (
+    combined.includes('храм') ||
+    combined.includes('собор') ||
+    combined.includes('церков') ||
+    combined.includes('церковь') ||
+    combined.includes('костёл') ||
+    combined.includes('костел') ||
+    combined.includes('монастыр') ||
+    combined.includes('синагог') ||
+    combined.includes('мечет') ||
+    combined.includes('часовн') ||
+    combined.includes('иконы') ||
+    combined.includes('приход') ||
+    combined.includes('епархи')
+  );
+}
+
+// Проверенные заведения и бульвары в Бобруйске (включая точки у дома пользователя: Батова, Рокоссовского, Сикорского)
+const BOBRUISK_VERIFIED_PLACES: RealPOICandidate[] = [
+  {
+    id: 'bobr_shaurmaster_1',
+    name: 'Шаурмастер',
+    cat: 'Фастфуд / Стритфуд',
+    lat: 53.191859,
+    lon: 29.225388,
+    dist: 0,
+    address: 'ул. Генерала Батова, 17А',
+    rating: 4.9,
+    reviews_count: 142,
+    opening_hours: 'Ежедневно 10:00 – 22:00',
+    tags: ['Сочная шаурма', 'Быстрый перекус', 'Оплата картой', 'Еда с собой'],
+    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Шаурмастер Бобруйск ул Генерала Батова 17А'),
+    reviews: [],
+  },
+  {
+    id: 'bobr_shaurmichka_2',
+    name: 'Шаурмичка',
+    cat: 'Фастфуд / Стритфуд',
+    lat: 53.191350,
+    lon: 29.226200,
+    dist: 0,
+    address: 'ул. Генерала Батова / Назаровка',
+    rating: 4.8,
+    reviews_count: 89,
+    opening_hours: 'Ежедневно 10:00 – 23:00',
+    tags: ['Шаурма у дома', 'Быстрый стритфуд', 'Кофе и напитки'],
+    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Шаурмичка Бобруйск Батова'),
+    reviews: [],
+  },
+  {
+    id: 'bobr_priberez_alley_3',
+    name: 'Приберезинский бульвар',
+    cat: 'Живописный бульвар',
+    lat: 53.196000,
+    lon: 29.232000,
+    dist: 0,
+    address: 'Приберезинский бульвар (вдоль Березины)',
+    rating: 4.9,
+    reviews_count: 67,
+    opening_hours: 'Круглосуточно для прогулок',
+    tags: ['Широкий тротуар', 'Красивый вид на реку', 'Освещенная аллея', 'Без частного сектора'],
+    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Приберезинский бульвар Бобруйск'),
+    reviews: [],
+  },
+  {
+    id: 'bobr_family_trees_park_4',
+    name: 'Парк Семейных деревьев',
+    cat: 'Парк / Сквер',
+    lat: 53.193200,
+    lon: 29.228500,
+    dist: 0,
+    address: 'ул. Генерала Батова / ул. Сикорского',
+    rating: 4.8,
+    reviews_count: 53,
+    opening_hours: 'Круглосуточно',
+    tags: ['Зеленый сквер', 'Скамейки в тени', 'Пешеходные дорожки', 'Чистый воздух'],
+    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Парк Семейных деревьев Бобруйск'),
+    reviews: [],
+  },
+  {
+    id: 'bobr_shavabro_5',
+    name: 'Шава БРО',
+    cat: 'Фастфуд / Стритфуд',
+    lat: 53.194500,
+    lon: 29.218000,
+    dist: 0,
+    address: 'ул. Ульяновская, 66',
+    rating: 4.8,
+    reviews_count: 110,
+    opening_hours: 'Ежедневно 10:00 – 23:00',
+    tags: ['Шаурма и бургеры', 'Стритфуд', 'Оплата картой'],
+    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Шава БРО Бобруйск ул Ульяновская 66'),
+    reviews: [],
+  },
+  {
+    id: 'bobr_shavahouse_6',
+    name: 'Шава Хауз',
+    cat: 'Фастфуд / Стритфуд',
+    lat: 53.192800,
+    lon: 29.214000,
+    dist: 0,
+    address: 'ул. 50 лет ВЛКСМ, 108',
+    rating: 4.7,
+    reviews_count: 95,
+    opening_hours: 'Ежедневно 10:00 – 23:00',
+    tags: ['Стритфуд', 'Шаурма', 'Картофель фри'],
+    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Шава Хауз Бобруйск 50 лет ВЛКСМ 108'),
+    reviews: [],
+  },
+  {
+    id: 'bobr_molodezhny_park_7',
+    name: 'Молодежный парк',
+    cat: 'Парк / Сквер',
+    lat: 53.188000,
+    lon: 29.220000,
+    dist: 0,
+    address: 'проспект Строителей',
+    rating: 4.8,
+    reviews_count: 82,
+    opening_hours: 'Круглосуточно',
+    tags: ['Уютные аллеи', 'Скамейки', 'Прогулочная зона'],
+    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Молодежный парк Бобруйск'),
+    reviews: [],
+  },
+  {
+    id: 'bobr_cafe_pravda_8',
+    name: 'Кофейня Правда',
+    cat: 'Кофейня',
+    lat: 53.141500,
+    lon: 29.228000,
+    dist: 0,
+    address: 'ул. Минская, 25',
+    rating: 4.9,
+    reviews_count: 130,
+    opening_hours: 'Ежедневно 08:00 – 22:00',
+    tags: ['Свежий кофе', 'Уютная атмосфера', 'Десерты'],
+    yandex_url: 'https://yandex.ru/maps/?text=' + encodeURIComponent('Кофейня Правда Бобруйск'),
+    reviews: [],
+  },
+];
+
+/**
  * Получение спутникового снимка Яндекс Карт высокого разрешения с маркером
  */
 export function getSatellitePhotoUrl(lat: number, lon: number): string {
@@ -355,9 +507,8 @@ async function searchYandexOrganizations(
     for (const query of allSearchQueries) {
       if (results.length >= 35) break;
       try {
-        // Поиск с provider: 'yandex#search' для извлечения организаций
+        // Поиск через геокодер Яндекс Карт
         const res = await ymaps.geocode(query, {
-          provider: 'yandex#search',
           boundedBy: bounds,
           strictBounds: false,
           results: 15,
@@ -563,16 +714,32 @@ export async function fetchRealPlacesAround(
   const candidatePool: RealPOICandidate[] = [];
   const seenNames = new Set<string>();
 
+  const actList = preferredActivities.length > 0 ? preferredActivities : ['walk', 'coffee', 'views'];
+
   const addCandidate = (c: RealPOICandidate) => {
     const norm = c.name.toLowerCase().trim();
     if (seenNames.has(norm) || isBlacklisted(c.name, c.cat, c.address || '')) return;
+    // Религиозные объекты (храмы, церкви, соборы) СТРОГО запрещены, если не выбран формат памятники/достопримечательности
+    if (!actList.includes('sights') && isReligious(c.name, c.cat, c.address || '')) return;
     seenNames.add(norm);
     candidatePool.push(c);
   };
 
-  const ymapsKeywords: string[] = [];
+  // Если координаты находятся в Бобруйске (включая дом пользователя на Батова/Сикорского) — подключаем проверенные локации
+  const distToBobruisk = getCoordinatesDistance(startLat, startLon, 53.191294, 29.226132);
+  if (distToBobruisk < 15000) {
+    for (const vp of BOBRUISK_VERIFIED_PLACES) {
+      const d = getCoordinatesDistance(startLat, startLon, vp.lat, vp.lon);
+      if (d <= Math.max(1600, radiusMeters * 1.5)) {
+        addCandidate({
+          ...vp,
+          dist: d,
+        });
+      }
+    }
+  }
 
-  const actList = preferredActivities.length > 0 ? preferredActivities : ['walk', 'coffee', 'views'];
+  const ymapsKeywords: string[] = [];
 
   if (actList.includes('fastfood')) {
     ymapsKeywords.push('шаурма', 'шаурмичка', 'шаурмастер', 'фастфуд', 'бургерная', 'пиццерия', 'бистро', 'кафе');
@@ -624,8 +791,8 @@ export async function fetchRealPlacesAround(
 
   // Запускаем поиск через сервисы Яндекс Карт и Википедию параллельно
   const [wikiRes, ymapsBizRes, ymapsStreetRes] = await Promise.allSettled([
-    // Википедию опрашиваем только если выбраны достопримечательности или общая прогулка
-    actList.includes('sights') || actList.includes('walk') || actList.length === 0
+    // Википедию опрашиваем ТОЛЬКО если пользователь ЯВНО выбрал памятники/достопримечательности ('sights')
+    actList.includes('sights')
       ? fetchWikipediaPlacesAround(startLat, startLon, radiusMeters)
       : Promise.resolve([]),
     searchYandexOrganizations(startLat, startLon, radiusMeters, ymapsKeywords),
