@@ -6,83 +6,166 @@ import {
   type RealPOICandidate,
 } from './realPlacesService';
 
-const SCENARIOS_INFO: Record<string, { title: string; defaultActivities: string[]; desc: string }> = {
+export const SCENARIOS_INFO: Record<string, { title: string; defaultActivities: string[]; desc: string }> = {
+  walk: {
+    title: 'Пешая прогулка',
+    defaultActivities: ['walk', 'views'],
+    desc: 'Пеший маршрут через красивые бульвары, набережные и открытые виды',
+  },
+  sights: {
+    title: 'Достопримечательности',
+    defaultActivities: ['sights', 'walk'],
+    desc: 'Архитектура, памятники, исторические соборы и городские тайны',
+  },
+  coffee: {
+    title: 'За кофе',
+    defaultActivities: ['coffee', 'views'],
+    desc: 'Лучшие кофейни, кофе с собой, десерты и уютные посадки',
+  },
+  fastfood: {
+    title: 'Фастфуд и стритфуд',
+    defaultActivities: ['fastfood', 'walk'],
+    desc: 'Сочная шаурма, бургеры, пицца, KFC и аппетитный уличный перекус',
+  },
+  views: {
+    title: 'Красивые виды',
+    defaultActivities: ['views', 'walk'],
+    desc: 'Смотровые площадки, панорамы, широкие бульвары и набережные',
+  },
+  nature: {
+    title: 'Природа и парки',
+    defaultActivities: ['nature', 'walk'],
+    desc: 'Тенистые аллеи, скверы, парки, пруды и чистый воздух',
+  },
+  bakery: {
+    title: 'Пекарни и выпечка',
+    defaultActivities: ['bakery', 'coffee'],
+    desc: 'Свежая выпечка, хрустящие круассаны и уютные булочные',
+  },
   date: {
     title: 'Романтическое свидание',
-    defaultActivities: ['coffee', 'nature', 'photo'],
-    desc: 'Уютная кофейня, красивый сквер и видовая площадка для неспешного общения',
-  },
-  tourist: {
-    title: 'Городская прогулка',
-    defaultActivities: ['history', 'photo', 'nature'],
-    desc: 'Архитектура, памятники, исторические улицы и знаковые городские виды',
-  },
-  coffee_walk: {
-    title: 'За кофе',
-    defaultActivities: ['coffee', 'nature'],
-    desc: 'Лучшие кофейни на вынос, свежая выпечка и тихие аллеи для прогулки',
+    defaultActivities: ['date', 'coffee', 'views'],
+    desc: 'Уютная атмосфера, вечерние огни, десерты и неспешное общение',
   },
   dog_walk: {
     title: 'С собакой',
-    defaultActivities: ['pets', 'nature'],
-    desc: 'Просторные парки, зеленые аллеи и площадки вдали от оживленных дорог',
+    defaultActivities: ['dog_walk', 'nature'],
+    desc: 'Просторные парки, зеленые аллеи и площадки вдали от дорог',
+  },
+  shopping: {
+    title: 'Магазины и ТЦ',
+    defaultActivities: ['shopping', 'walk'],
+    desc: 'Оживленные улицы с витринами, торговые центры и галереи',
+  },
+  quiet: {
+    title: 'Тихий отдых',
+    defaultActivities: ['quiet', 'nature'],
+    desc: 'Уединенные малолюдные аллеи и скамейки для спокойных бесед',
+  },
+  sweets: {
+    title: 'Сладкое и мороженое',
+    defaultActivities: ['sweets', 'coffee'],
+    desc: 'Джелато, авторские десерты и кондитерские лавки',
+  },
+  // Совместимость со старыми ключами
+  tourist: {
+    title: 'Пешая прогулка',
+    defaultActivities: ['walk', 'views'],
+    desc: 'Красивые места города',
+  },
+  coffee_walk: {
+    title: 'За кофе',
+    defaultActivities: ['coffee', 'views'],
+    desc: 'Кофейни и аллеи',
   },
 };
 
-export type CategoryGroup = 'food' | 'nature' | 'sight' | 'other';
+export type CategoryGroup =
+  | 'fastfood'
+  | 'coffee'
+  | 'bakery'
+  | 'sweets'
+  | 'views'
+  | 'nature'
+  | 'sights'
+  | 'shopping'
+  | 'walk'
+  | 'other';
 
 /**
- * Определение смысловой группы места для соблюдения разнообразия
- * (исключает "3 кофейни подряд / 3 приема пищи")
+ * Определение смысловой группы места для соблюдения точного соответствия форматам прогулки
  */
 export function getCategoryGroup(cat: string): CategoryGroup {
   const c = cat.toLowerCase();
   if (
-    c.includes('кофе') ||
-    c.includes('пекарн') ||
-    c.includes('кафе') ||
-    c.includes('десерт') ||
-    c.includes('ресторан') ||
-    c.includes('бистро') ||
-    c.includes('еда') ||
-    c.includes('пицц')
+    c.includes('фастфуд') ||
+    c.includes('шаурм') ||
+    c.includes('шаверм') ||
+    c.includes('донер') ||
+    c.includes('бургер') ||
+    c.includes('kfc') ||
+    c.includes('кфс') ||
+    c.includes('пицц') ||
+    c.includes('стритфуд') ||
+    c.includes('додо') ||
+    c.includes('чебурек') ||
+    c.includes('блин') ||
+    c.includes('драник')
   ) {
-    return 'food';
+    return 'fastfood';
+  }
+  if (c.includes('кофе') || c.includes('чай') || c.includes('coffee')) {
+    return 'coffee';
+  }
+  if (c.includes('пекарн') || c.includes('булочн') || c.includes('выпечк') || c.includes('круассан')) {
+    return 'bakery';
+  }
+  if (c.includes('морожен') || c.includes('джелато') || c.includes('сладост') || c.includes('кондитер')) {
+    return 'sweets';
+  }
+  if (
+    c.includes('смотров') ||
+    c.includes('набережн') ||
+    c.includes('бульвар') ||
+    c.includes('панорам') ||
+    c.includes('вид')
+  ) {
+    return 'views';
   }
   if (
     c.includes('парк') ||
     c.includes('сквер') ||
     c.includes('сад') ||
     c.includes('алле') ||
-    c.includes('бульвар') ||
-    c.includes('набережн') ||
-    c.includes('природ') ||
-    c.includes('смотров') ||
-    c.includes('вид') ||
+    c.includes('пруд') ||
     c.includes('озер') ||
-    c.includes('пруд')
+    c.includes('природ')
   ) {
     return 'nature';
   }
   if (
     c.includes('достопримеч') ||
     c.includes('памятник') ||
-    c.includes('истор') ||
+    c.includes('мемориал') ||
     c.includes('музей') ||
-    c.includes('архитектур') ||
-    c.includes('площадь') ||
-    c.includes('улиц') ||
-    c.includes('проспект') ||
     c.includes('храм') ||
     c.includes('собор') ||
-    c.includes('костел')
+    c.includes('костел') ||
+    c.includes('архитектур') ||
+    c.includes('истор')
   ) {
-    return 'sight';
+    return 'sights';
+  }
+  if (c.includes('магазин') || c.includes('тц') || c.includes('торгов') || c.includes('галере') || c.includes('шопинг')) {
+    return 'shopping';
+  }
+  if (c.includes('улиц') || c.includes('проспект') || c.includes('пешеходн') || c.includes('променад')) {
+    return 'walk';
   }
   return 'other';
 }
 
-// Функция определения комфортного количества остановок (фокус на отдых и беседы)
+// Функция определения комфортного количества остановок
 export function calculateStopCount(durationMinutes: number, manualStopCount?: number): number {
   if (manualStopCount && manualStopCount > 0) {
     return Math.min(6, Math.max(1, manualStopCount));
@@ -101,8 +184,6 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
 
 /**
  * Расчет параметров движения вдоль пешеходного коридора А -> Б в метрах.
- * t — линейный прогресс (0 = старт, 1 = финиш).
- * lateralMeters — перпендикулярное смещение от прямой линии маршрута.
  */
 export function getCorridorMetrics(
   startLat: number,
@@ -139,7 +220,6 @@ export function getCorridorMetrics(
 
 /**
  * Идеальный алгоритм построения кольцевого маршрута (Loop Polygon).
- * Исключает метания туда-обратно и гарантирует плавную круговую петлю возврата к старту!
  */
 export function orderCircularStops(startLat: number, startLon: number, stops: RouteStop[]): RouteStop[] {
   if (stops.length <= 1) return stops;
@@ -185,7 +265,6 @@ export function orderCircularStops(startLat: number, startLon: number, stops: Ro
 
 /**
  * Сортировка остановок строго по направлению движения коридора А -> Б.
- * Гарантирует последовательное монотонное продвижение вперед БЕЗ возвратов назад и БЕЗ прохода мимо финиша!
  */
 export function orderCorridorStops(
   startLat: number,
@@ -276,6 +355,98 @@ function calculateRouteTimeline(
   };
 }
 
+/**
+ * Умная генерация вдохновляющего названия прогулки на основе остановок, форматов и финиша.
+ * КАТЕГОРИЧЕСКИ исключает сухие технические строки вроде "Маршрут в выбранная точка финиша".
+ */
+export function generateSmartRouteTitle(
+  scenario: string,
+  activities: string[],
+  stops: RouteStop[],
+  endName?: string,
+  customPrompt?: string
+): string {
+  if (customPrompt && customPrompt.trim().length > 3) {
+    const cleanPrompt = customPrompt.trim();
+    if (cleanPrompt.length <= 36) {
+      return cleanPrompt.charAt(0).toUpperCase() + cleanPrompt.slice(1);
+    }
+  }
+
+  // Очистка от технических заглушек финиша
+  let cleanEndName: string | undefined = undefined;
+  if (endName) {
+    const lower = endName.toLowerCase().trim();
+    if (
+      !lower.includes('выбранная точка') &&
+      !lower.includes('точка финиша') &&
+      !lower.includes('конечная') &&
+      !lower.includes('точка 5') &&
+      !lower.match(/^\d+[\.,]\d+/)
+    ) {
+      cleanEndName = endName.replace(/^г\.\s*[^,]+,\s*/i, '').trim();
+    }
+  }
+
+  const acts = activities.length > 0 ? activities : [scenario];
+
+  // Знаковые остановки из маршрута
+  const boulevardStop = stops.find(
+    (s) => s.category.toLowerCase().includes('бульвар') || s.name.toLowerCase().includes('бульвар')
+  )?.name;
+  const parkStop = stops.find((s) => s.category.toLowerCase().includes('парк'))?.name;
+  const foodStop = stops.find(
+    (s) =>
+      s.category.toLowerCase().includes('фастфуд') ||
+      s.category.toLowerCase().includes('шаурм') ||
+      s.category.toLowerCase().includes('кофе') ||
+      s.category.toLowerCase().includes('пекарн')
+  )?.name;
+
+  let lead = 'Красивый пеший маршрут';
+  if (acts.includes('fastfood')) {
+    lead = 'Стритфуд и променад';
+  } else if (acts.includes('coffee')) {
+    lead = 'Ароматный кофе и прогулка';
+  } else if (acts.includes('bakery')) {
+    lead = 'Свежая выпечка и теплый маршрут';
+  } else if (acts.includes('sweets')) {
+    lead = 'Сладкий променад и десерты';
+  } else if (acts.includes('sights')) {
+    lead = 'Архитектурный променад';
+  } else if (acts.includes('views')) {
+    lead = 'Видовой маршрут по бульварам';
+  } else if (acts.includes('nature')) {
+    lead = 'Зеленый променад сквозь парки';
+  } else if (acts.includes('date')) {
+    lead = 'Романтический вечерний променад';
+  } else if (acts.includes('dog_walk')) {
+    lead = 'Просторная прогулка с любимцем';
+  } else if (acts.includes('shopping')) {
+    lead = 'Прогулка по оживленным витринам';
+  } else if (acts.includes('quiet')) {
+    lead = 'Тихий умиротворяющий променад';
+  }
+
+  if (cleanEndName) {
+    return `${lead} к ${cleanEndName}`;
+  }
+
+  if (boulevardStop) {
+    return `${lead} по ${boulevardStop}`;
+  }
+
+  if (parkStop) {
+    return `${lead} через ${parkStop}`;
+  }
+
+  if (foodStop) {
+    return `${lead} через ${foodStop}`;
+  }
+
+  return `${lead} по красивым местам`;
+}
+
 interface LLMRouteResult {
   scenario_title: string;
   ai_thought: string;
@@ -289,7 +460,6 @@ interface LLMRouteResult {
 
 /**
  * Интеллектуальный нейросетевой планировщик маршрутов.
- * Строго следит за разнообразием категорий (не больше 1 кофейни за прогулку!).
  */
 async function planRouteWithAI(
   start_lat: number,
@@ -300,6 +470,7 @@ async function planRouteWithAI(
   activities: string[],
   is_circular: boolean,
   has_endpoint: boolean,
+  end_name: string | undefined,
   targetStopCount: number,
   candidates: { id: string; name: string; cat: string; lat: number; lon: number; dist: number; address?: string }[],
   apiKey?: string
@@ -312,8 +483,8 @@ async function planRouteWithAI(
     distance_meters: Math.round(c.dist),
   }));
 
-  const scenarioName = SCENARIOS_INFO[scenario]?.title || scenario;
-  const activitiesStr = activities.length > 0 ? activities.join(', ') : 'уютная прогулка, отдых, разговоры';
+  const acts = activities.length > 0 ? activities : [scenario];
+  const formatNames = acts.map((a) => SCENARIOS_INFO[a]?.title || a).join(', ');
 
   const walkingBudgetMin = Math.min(45, Math.max(12, Math.round(duration_minutes * 0.32)));
   const spentBudgetMin = duration_minutes - walkingBudgetMin;
@@ -321,32 +492,41 @@ async function planRouteWithAI(
 
   let routeTypeDesc = 'КРУГОВОЙ МАРШРУТ (ПЕТЛЯ) — плавное связное кольцо в одном районе с возвратом к старту.';
   if (has_endpoint) {
-    routeTypeDesc = 'МАРШРУТ К КОНЕЧНОЙ ТОЧКЕ (А -> Б) — последовательное движение вперед к точке финиша без возвратов назад.';
+    routeTypeDesc = `МАРШРУТ К КОНЕЧНОЙ ТОЧКЕ (А -> Б)${end_name ? ` (к точке: ${end_name})` : ''} — последовательное движение вперед к финишу без возвратов назад.`;
   } else if (!is_circular) {
     routeTypeDesc = 'ЛИНЕЙНЫЙ МАРШРУТ — точки удаляются от старта в комфортном направлении.';
   }
 
   const systemPrompt = `Ты — ведущий AI-урбанист и архитектор пеших прогулок «StepByStep AI».
-Твоя задача — составить гармоничный, разнообразный пешеходный маршрут для отдыха, приятных разговоров и впечатлений.
+Твоя задача — составить гармоничный, атмосферный пешеходный маршрут под выбранные пользователем форматы.
 
 СТРОГИЕ ПРАВИЛА:
-1. РАЗНООБРАЗИЕ КАТЕГОРИЙ: Категорически ЗАПРЕЩЕНО выбирать несколько заведений одной категории подряд (например 2 или 3 кофейни)! Прогулка — это НЕ три приема пищи!
-   - Максимум ОДНО заведение с едой/кофе (кофейня или пекарня),
-   - Обязательно 1 видовая или парковая зона (бульвар, парк, сквер, набережная),
-   - Обязательно 1 архитектурная или прогулочная точка (памятник, старинное здание, видовая аллея).
-2. ТИП МАРШРУТА: ${routeTypeDesc}
-3. ВСЕ ТОЧКИ СТРОГО ИЗ СПИСКА: Категорически ЗАПРЕЩЕНО выдумывать несуществующие заведения! Выбирай ТОЛЬКО строковые id из переданного списка кандидатов.
-4. Время: ${duration_minutes} мин. Выбери РОВНО ${targetStopCount} лучших мест из списка кандидатов.
-5. В 'ai_thought' (2-3 предложения) опиши логику прогулки: почему именно такое сочетание кофе, бульвара/парка и архитектуры подарит лучшие впечатления.
-6. В 'scenario_title' придумай красивое вдохновляющее название прогулки.
-7. В 'description' напиши персонализированный совет, где присесть и на что обратить внимание.`;
+1. ПОЖЕЛАНИЯ И ФОРМАТЫ: Пользователь выбрал: "${formatNames}".
+   - "Прогулка" — это пеший маршрут через красивые бульвары, набережные и открытые виды (БЕЗ обязательной истории/архитектуры!).
+   - "Достопримечательности" — архитектура, памятники, исторические здания, соборы, музеи.
+   - "Фастфуд" — шаурма, бургеры, пиццерии, стритфуд, KFC.
+   - "Кофейни" — кофе на вынос, спешелти кофейни, десерты.
+   - "Красивые виды" — бульвары, панорамы, набережные.
+   - "Природа" — парки, скверы, аллеи.
+2. В 'scenario_title' ОБЯЗАТЕЛЬНО придумай уникальное, вдохновляющее и красивое название прогулки на русском языке (3-6 слов) исходя из остановок, форматов и конечной точки!
+   Примеры отличных названий:
+   - "Вкусный стритфуд и вечерний променад к ФОК Техас"
+   - "Ароматный кофе сквозь зеленые аллеи"
+   - "Архитектурные сокровища и видовые скверы"
+   - "Живописный променад по бульвару к парку"
+   Категорически ЗАПРЕЩЕНО писать сухие фразы вроде "Маршрут в выбранная точка финиша", "Маршрут в точку", "Прогулка 1"!
+3. ТИП МАРШРУТА: ${routeTypeDesc}
+4. ТОЛЬКО ИЗ СПИСКА: Выбирай строго id кандидатов из переданного списка.
+5. Выбери РОВНО ${targetStopCount} лучших мест.
+6. В 'ai_thought' (2-3 предложения) опиши логику прогулки.
+7. В 'description' напиши приятный совет, чем полюбоваться или что взять.`;
 
   const userPrompt = `
 Локация старта: ${start_lat.toFixed(4)}, ${start_lon.toFixed(4)}.
-Сценарий: ${scenarioName}.
-Формат: ${routeTypeDesc}.
-Пожелание пользователя: "${custom_prompt || 'уютная неспешная прогулка, чтобы посидеть, поговорить и отдохнуть'}".
-Выбранные активности: ${activitiesStr}.
+Выбранные форматы: ${formatNames}.
+Формат трека: ${routeTypeDesc}.
+Конечная точка: ${end_name || 'Не задана (кольцевой)'}.
+Пожелание пользователя: "${custom_prompt || 'уютная неспешная прогулка, чтобы посидеть, перекусить и отдохнуть'}".
 Количество остановок: ${targetStopCount}.
 
 Список проверенных РЕАЛЬНЫХ кандидатов:
@@ -354,8 +534,8 @@ ${JSON.stringify(simplifiedCandidates, null, 2)}
 
 Верни СТРОГО валидный JSON следующего формата:
 {
-  "scenario_title": "Атмосферное название прогулки",
-  "ai_thought": "Почему эти разные места образуют гармоничную прогулку",
+  "scenario_title": "Красивое образное название (3-6 слов)",
+  "ai_thought": "Почему эти места подарят лучшие впечатления",
   "stops": [
     {
       "id": "строковый id из списка кандидатов",
@@ -393,9 +573,12 @@ ${JSON.stringify(simplifiedCandidates, null, 2)}
           if (text) {
             const parsed = JSON.parse(text);
             if (parsed.stops && parsed.stops.length > 0) {
+              const scTitle = parsed.scenario_title && !parsed.scenario_title.toLowerCase().includes('выбранная точка')
+                ? parsed.scenario_title
+                : '';
               return {
-                scenario_title: parsed.scenario_title || scenarioName,
-                ai_thought: parsed.ai_thought || 'Маршрут гармонично сочетает отдых за кофе, прогулку по бульвару и знакомство с городом.',
+                scenario_title: scTitle,
+                ai_thought: parsed.ai_thought || 'Маршрут гармонично сочетает выбранные вами места и красивые виды города.',
                 stops: parsed.stops,
                 model: `Google ${model}`,
               };
@@ -432,11 +615,14 @@ ${JSON.stringify(simplifiedCandidates, null, 2)}
       text = text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
       const parsed = JSON.parse(text);
       if (parsed.stops && Array.isArray(parsed.stops) && parsed.stops.length > 0) {
+        const scTitle = parsed.scenario_title && !parsed.scenario_title.toLowerCase().includes('выбранная точка')
+          ? parsed.scenario_title
+          : '';
         return {
-          scenario_title: parsed.scenario_title || scenarioName,
+          scenario_title: scTitle,
           ai_thought:
             parsed.ai_thought ||
-            'Маршрут гармонично сочетает уютное кафе, оживленный бульвар и интересную архитектуру.',
+            'Маршрут гармонично объединяет любимые форматы отдыха и комфортные пешеходные улицы.',
           stops: parsed.stops,
           model: 'StepByStep AI Engine',
         };
@@ -450,10 +636,7 @@ ${JSON.stringify(simplifiedCandidates, null, 2)}
 }
 
 /**
- * ГЛАВНЫЙ ГЕНЕРАТОР МАРШРУТА:
- * Поддерживает как круговые маршруты, так и маршруты к выбранной конечной точке (А -> Б).
- * Исключает дублирование кофеен (максимум 1 кофейня за прогулку) и контролирует компактный радиус.
- * Приоритет оживленным бульварам и улицам с магазинами (ПОЛНЫЙ ОБХОД ЧАСТНОГО СЕКТОРА).
+ * ГЛАВНЫЙ ГЕНЕРАТОР МАРШРУТА
  */
 export async function generateRouteClientFallback(params: RouteRequest): Promise<RouteResponse> {
   const {
@@ -478,11 +661,11 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
   const hasEndPoint = end_lat !== undefined && end_lon !== undefined && !is_circular;
   const directDist = hasEndPoint ? getDistance(start_lat, start_lon, end_lat, end_lon) : 0;
 
-  // Комфортный компактный пешеходный радиус (не уводит пользователя за километры!)
+  // Комфортный компактный пешеходный радиус
   let radius = 600;
   if (duration_minutes <= 45) radius = 400;
   else if (duration_minutes <= 75) radius = 550;
-  else if (duration_minutes <= 110) radius = 700; // 1.5 часа = уютный радиус 700 метров
+  else if (duration_minutes <= 110) radius = 700;
   else if (duration_minutes <= 150) radius = 850;
   else radius = 1000;
 
@@ -490,7 +673,6 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     radius = Math.max(radius, Math.round(directDist * 0.62));
   }
 
-  // Расчет целевого количества остановок (СТРОГО гарантируется!)
   const targetStopCount = calculateStopCount(duration_minutes, stop_count);
 
   let searchCenterLat = start_lat;
@@ -500,22 +682,20 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     searchCenterLon = (start_lon + end_lon) / 2;
   }
 
-  // Поиск реальных проверенных мест (кофейни, пекарни, бульвары, скверы, парки)
-  let realPlaces = await fetchRealPlacesAround(searchCenterLat, searchCenterLon, radius, activities);
+  const acts = activities.length > 0 ? activities : [scenario || 'walk'];
 
-  let corridorCandidates: (RealPOICandidate & { t: number; lateralMeters: number; group: string })[] = [];
+  // Поиск реальных проверенных мест под выбранные форматы
+  let realPlaces = await fetchRealPlacesAround(searchCenterLat, searchCenterLon, radius, acts);
+
+  let corridorCandidates: (RealPOICandidate & { t: number; lateralMeters: number; group: CategoryGroup })[] = [];
 
   if (hasEndPoint) {
-    // Максимально допустимое боковое отклонение от коридора (не более 350-450м!)
     const maxLateralMeters = Math.min(450, Math.max(220, directDist * 0.35));
 
     for (const p of realPlaces) {
       const { t, lateralMeters } = getCorridorMetrics(start_lat, start_lon, end_lat, end_lon, p.lat, p.lon);
 
-      // СТРОГИЙ КОРИДОРНЫЙ ФИЛЬТР:
-      // 1. Прогресс t строго между 0.04 и 0.96 (только движение вперед!)
-      // 2. Исключены точки позади старта (t < 0.04) и точки за финишем (t > 0.96)!
-      // 3. Боковое отклонение не более maxLateralMeters (полностью исключает промзоны и станции за километры)!
+      // Строгий коридорный фильтр (без возвратов назад и без захода в глухие промзоны)
       if (t >= 0.04 && t <= 0.96 && lateralMeters <= maxLateralMeters) {
         corridorCandidates.push({
           ...p,
@@ -526,7 +706,6 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
       }
     }
 
-    // Сортируем строго по направлению движения вперед
     corridorCandidates.sort((a, b) => a.t - b.t);
   }
 
@@ -549,7 +728,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
   const spentBudgetMin = duration_minutes - walkingBudgetMin;
   const defaultSpentPerStop = Math.max(12, Math.round(spentBudgetMin / Math.max(1, targetStopCount)));
 
-  // Обязательные точки пользователя (если есть)
+  // Обязательные точки пользователя (если заданы)
   const customWaypointStops: (RouteStop & { t?: number })[] = (waypoints || []).map((w, idx) => {
     let tVal = 0;
     if (hasEndPoint) {
@@ -578,7 +757,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
 
   selectedStops.push(...customWaypointStops);
 
-  // 2. Обращение к нейросети для умного подбора остановок
+  // 2. Обращение к нейросети
   if (parsedPois.length > 0) {
     const llmPlan = await planRouteWithAI(
       start_lat,
@@ -586,9 +765,10 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
       duration_minutes,
       scenario,
       custom_prompt,
-      activities,
+      acts,
       is_circular,
       hasEndPoint,
+      end_name,
       targetStopCount,
       parsedPois,
       api_key
@@ -597,17 +777,24 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     if (llmPlan && llmPlan.stops && llmPlan.stops.length > 0) {
       usedModelName = llmPlan.model;
       aiThought = llmPlan.ai_thought;
-      customTitle = llmPlan.scenario_title;
+      if (llmPlan.scenario_title && llmPlan.scenario_title.length > 3) {
+        customTitle = llmPlan.scenario_title;
+      }
 
       for (const stop of llmPlan.stops) {
         if (selectedStops.length >= Math.max(targetStopCount, customWaypointStops.length)) break;
         const match = poiMap.get(stop.id);
         if (match && !selectedStops.some((s) => s.name.toLowerCase() === match.name.toLowerCase())) {
-          const itemGroup = getCategoryGroup(match.cat);
-          const currentFoodCount = selectedStops.filter((s) => getCategoryGroup(s.category) === 'food').length;
+          const itemGroup = match.group;
 
-          // СТРОГОЕ ПРАВИЛО: не больше 1 кофейни/еды за прогулку!
-          if (itemGroup === 'food' && currentFoodCount >= 1) {
+          // Контроль дублирования еды (не делать несколько шаурмичных подряд, если не просили)
+          const currentFastfoodCount = selectedStops.filter((s) => getCategoryGroup(s.category) === 'fastfood').length;
+          const currentCoffeeCount = selectedStops.filter((s) => getCategoryGroup(s.category) === 'coffee').length;
+
+          if (itemGroup === 'fastfood' && currentFastfoodCount >= 1 && !acts.includes('fastfood_multiple')) {
+            continue;
+          }
+          if (itemGroup === 'coffee' && currentCoffeeCount >= 1 && !acts.includes('coffee_multiple')) {
             continue;
           }
 
@@ -618,7 +805,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
             lat: match.lat,
             lon: match.lon,
             spent_minutes: Math.max(12, stop.spent_minutes || defaultSpentPerStop),
-            description: stop.description || `${match.name} (${match.cat}) — прекрасное место для отдыха и приятного разговора.`,
+            description: stop.description || `${match.name} (${match.cat}) — приятная остановка на маршруте.`,
             order: 0,
             address: match.address,
             photo_url: match.photo_url,
@@ -637,42 +824,57 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     }
   }
 
-  // 3. ДОБОР ДО ЦЕЛЕВОГО КОЛИЧЕСТВА ОСТАНОВОК С ПРИОРИТЕТОМ РАЗНООБРАЗИЯ
+  // 3. ДОБОР ДО ТОЧНОГО КОЛИЧЕСТВА ОСТАНОВОК ПО ВЫБРАННЫМ ФОРМАТАМ
   if (selectedStops.length < targetStopCount) {
     const existingNames = new Set(selectedStops.map((s) => s.name.toLowerCase()));
     let remaining = parsedPois.filter((p) => !existingNames.has(p.name.toLowerCase()));
 
-    while (selectedStops.length < targetStopCount && remaining.length > 0) {
-      const foodCount = selectedStops.filter((s) => getCategoryGroup(s.category) === 'food').length;
-      const natureCount = selectedStops.filter((s) => getCategoryGroup(s.category) === 'nature').length;
-      const sightCount = selectedStops.filter((s) => getCategoryGroup(s.category) === 'sight').length;
+    // Приоритетные группы из выбранных форматов
+    const desiredGroups: CategoryGroup[] = [];
+    if (acts.includes('fastfood')) desiredGroups.push('fastfood');
+    if (acts.includes('coffee')) desiredGroups.push('coffee');
+    if (acts.includes('bakery')) desiredGroups.push('bakery');
+    if (acts.includes('sweets')) desiredGroups.push('sweets');
+    if (acts.includes('views') || acts.includes('walk')) desiredGroups.push('views');
+    if (acts.includes('nature') || acts.includes('dog_walk') || acts.includes('quiet')) desiredGroups.push('nature');
+    if (acts.includes('sights')) desiredGroups.push('sights');
+    if (acts.includes('shopping')) desiredGroups.push('shopping');
 
-      // Приоритет категорий: бульвар/природа -> архитектура/достопримечательность -> кофе/еда (если еще нет)
+    while (selectedStops.length < targetStopCount && remaining.length > 0) {
       let candidateIdx = -1;
-      if (natureCount === 0) {
-        candidateIdx = remaining.findIndex((r) => r.group === 'nature');
+
+      // Ищем место из форматов, которые еще не представлены
+      for (const dg of desiredGroups) {
+        const hasGroup = selectedStops.some((s) => getCategoryGroup(s.category) === dg);
+        if (!hasGroup) {
+          candidateIdx = remaining.findIndex((r) => r.group === dg);
+          if (candidateIdx !== -1) break;
+        }
       }
-      if (candidateIdx === -1 && sightCount === 0) {
-        candidateIdx = remaining.findIndex((r) => r.group === 'sight');
-      }
-      if (candidateIdx === -1 && foodCount === 0) {
-        candidateIdx = remaining.findIndex((r) => r.group === 'food');
-      }
+
+      // Если все желаемые уже представлены, берем не-еду (чтобы не дублировать фастфуд/кофе)
       if (candidateIdx === -1) {
-        candidateIdx = remaining.findIndex((r) => r.group !== 'food');
+        candidateIdx = remaining.findIndex((r) => r.group !== 'fastfood' && r.group !== 'coffee');
       }
+
       if (candidateIdx === -1) {
         candidateIdx = 0;
       }
 
       const item = remaining.splice(candidateIdx, 1)[0];
       let desc = `${item.name} (${item.cat}) — приятное место для неспешного шага и отдыха.`;
-      if (item.group === 'food') {
-        desc = `${item.name} — отличная остановка, чтобы взять любимый кофе или свежий перекус с собой на прогулку.`;
+      if (item.group === 'fastfood') {
+        desc = `${item.name} — отличная остановка, чтобы взять любимый стритфуд (шаурму, бургер или пиццу) с собой.`;
+      } else if (item.group === 'coffee') {
+        desc = `${item.name} — уютная кофейня с ароматным кофе на вынос и свежими десертами.`;
+      } else if (item.group === 'bakery') {
+        desc = `${item.name} — теплая пекарня со свежей выпечкой и хрустящей выпечкой.`;
+      } else if (item.group === 'views') {
+        desc = `${item.name} — красивая панорамная зона с открытыми видами и широким тротуаром.`;
       } else if (item.group === 'nature') {
-        desc = `${item.name} — живописная зона со скамейками и деревьями, где приятно пройтись и отдохнуть от суеты.`;
-      } else if (item.group === 'sight') {
-        desc = `${item.name} — красивая городская локация с интересной архитектурой для неспешного осмотра.`;
+        desc = `${item.name} — живописная зеленая аллея со скамейками, где приятно пройтись вдали от шума.`;
+      } else if (item.group === 'sights') {
+        desc = `${item.name} — знаковое городское место с красивой архитектурой и историей.`;
       }
 
       selectedStops.push({
@@ -699,8 +901,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     }
   }
 
-  // 4. ГАРАНТИЯ ТОЧНОГО КОЛИЧЕСТВА ОСТАНОВОК И ОБХОД ЧАСТНОГО СЕКТОРА
-  // Если кандидатов в коридоре было меньше, чем requested, генерируем благоустроенные бульварные участки
+  // 4. ГАРАНТИЯ КОЛИЧЕСТВА ОСТАНОВОК И ОБХОД ЧАСТНОГО СЕКТОРА
   if (selectedStops.length < targetStopCount && hasEndPoint) {
     const needed = targetStopCount - selectedStops.length;
     for (let k = 1; k <= needed; k++) {
@@ -729,21 +930,6 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
         reviews: [],
         t: tTarget,
       });
-    }
-  }
-
-  if (!aiThought) {
-    aiThought = hasEndPoint
-      ? `Прямой комфортный маршрут вперед к финишу: остановка за перекусом, прогулка по широкому оживленному бульвару в обход частного сектора и видовые точки.`
-      : `Сбалансированная круговая прогулка на ${duration_minutes} мин. в радиусе ${radius}м: остановка за кофе, живописный парк со скамейками и красивые виды города. Без повтора кофеен.`;
-  }
-
-  // Если были добавлены кастомные точки пользователя
-  if (customWaypointStops.length > 0) {
-    const wpNames = customWaypointStops.map((w) => w.name).join(', ');
-    aiThought = `Маршрут построен с обязательным посещением выбранных вами мест: ${wpNames}. Остановки выстроены в оптимальном пешеходном порядке.`;
-    if (!customTitle) {
-      customTitle = `Прогулка с посещением ${customWaypointStops[0].name}`;
     }
   }
 
@@ -841,10 +1027,9 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
   const totalSpent = enrichedStops.reduce((acc, s) => acc + s.spent_minutes, 0);
   const totalRouteMinutes = walkingMinutes + totalSpent;
 
-  // 7. Реальный хронометраж и точный расчет времени старта / прибытия
+  // 7. Расчет реального времени старта и прибытия
   let routeStartDate = new Date();
   if (target_arrival_time && !start_time) {
-    // Режим "Прибыть к": отсчитываем назад от целевого времени прибытия
     const [ah, am] = target_arrival_time.split(':').map(Number);
     if (!isNaN(ah) && !isNaN(am)) {
       routeStartDate = new Date();
@@ -868,13 +1053,17 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
   const timeline = calculateRouteTimeline(routeStartDate, enrichedStops, walkingMinutes, is_circular, hasEndPoint);
   enrichedStops = timeline.stops;
 
+  // Умное название маршрута (никогда не пишет "маршрут в выбранная точка финиша")
   const scTitle =
-    customTitle ||
-    (custom_prompt
-      ? `Индивидуальный: ${custom_prompt.slice(0, 24)}...`
-      : hasEndPoint
-      ? `Маршрут в ${end_name || 'конечную точку'}`
-      : SCENARIOS_INFO[scenario]?.title || 'Прогулка');
+    customTitle && !customTitle.toLowerCase().includes('выбранная точка')
+      ? customTitle
+      : generateSmartRouteTitle(scenario, acts, enrichedStops, end_name, custom_prompt);
+
+  if (!aiThought) {
+    aiThought = hasEndPoint
+      ? `Прямой комфортный маршрут вперед к цели: посещение выбранных заведений, прогулка по широким оживленным бульварам и видовые точки города.`
+      : `Сбалансированная круговая прогулка на ${duration_minutes} мин.: комфортные пешеходные улицы, парковые зоны и приятный отдых без лишней спешки.`;
+  }
 
   return {
     total_walking_minutes: walkingMinutes,
@@ -894,7 +1083,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
         ? {
             lat: end_lat,
             lon: end_lon,
-            name: end_name || 'Конечная точка',
+            name: end_name && !end_name.toLowerCase().includes('выбранная точка') ? end_name : 'Конечный пункт',
             address: end_address,
           }
         : undefined,

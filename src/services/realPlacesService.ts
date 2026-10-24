@@ -54,23 +54,32 @@ export function getSchemePhotoUrl(lat: number, lon: number): string {
 
 export function getTagsForCategory(cat: string): string[] {
   const c = cat.toLowerCase();
+  if (c.includes('фастфуд') || c.includes('шаурм') || c.includes('стритфуд') || c.includes('бургер') || c.includes('пицц')) {
+    return ['Быстрый перекус', 'Шаурма и бургеры', 'Еда с собой', 'Оплата картой'];
+  }
   if (c.includes('кофе') || c.includes('чай')) {
-    return ['Кофе с собой', 'Оплата картой', 'Уютная посадка'];
+    return ['Кофе с собой', 'Оплата картой', 'Уютная посадка', 'Десерты'];
   }
-  if (c.includes('пекарн') || c.includes('десерт') || c.includes('выпечк')) {
-    return ['Свежая выпечка', 'Десерты', 'Оплата картой'];
+  if (c.includes('пекарн') || c.includes('булочн') || c.includes('выпечк') || c.includes('круассан')) {
+    return ['Свежая выпечка', 'Круассаны', 'Кофе и чай', 'Оплата картой'];
   }
-  if (c.includes('бульвар') || c.includes('проспект') || c.includes('алле')) {
+  if (c.includes('морожен') || c.includes('сладост') || c.includes('кондитер')) {
+    return ['Мороженое и десерты', 'Сладкое настроение', 'Оплата картой'];
+  }
+  if (c.includes('бульвар') || c.includes('проспект') || c.includes('алле') || c.includes('вид')) {
     return ['Широкий тротуар', 'Освещенная улица', 'Скамейки для отдыха', 'Без частного сектора'];
   }
-  if (c.includes('парк') || c.includes('сквер') || c.includes('сад')) {
+  if (c.includes('парк') || c.includes('сквер') || c.includes('сад') || c.includes('природ')) {
     return ['Скамейки в тени', 'Пешеходные дорожки', 'Чистый воздух', 'Красивый вид'];
+  }
+  if (c.includes('магазин') || c.includes('тц') || c.includes('галере') || c.includes('шопинг')) {
+    return ['Торговый центр', 'Витрины магазинов', 'Оживленный район'];
+  }
+  if (c.includes('памятник') || c.includes('достопримеч') || c.includes('истор') || c.includes('музей') || c.includes('храм') || c.includes('собор')) {
+    return ['Культурное наследие', 'Историческое место', 'Архитектура', 'Фотогенично'];
   }
   if (c.includes('ресторан') || c.includes('бистро') || c.includes('кафе') || c.includes('еда')) {
     return ['Вкусный перекус', 'Уютная терраса', 'Оплата картой'];
-  }
-  if (c.includes('памятник') || c.includes('достопримеч') || c.includes('истор') || c.includes('музей') || c.includes('храм')) {
-    return ['Культурное наследие', 'Историческое место', 'Фотогенично'];
   }
   return ['Пешая доступность', 'Красивая локация'];
 }
@@ -206,12 +215,13 @@ export async function fetchWikipediaPlacesAround(
 }
 
 /**
- * 2. Поиск через Nominatim OpenStreetMap (кофейни, пекарни, парки, бульвары)
+ * 2. Поиск через Nominatim OpenStreetMap с адаптивными ключевыми словами
  */
 async function fetchNominatimPlaces(
   startLat: number,
   startLon: number,
-  radiusMeters: number
+  radiusMeters: number,
+  searchKeywords: string[]
 ): Promise<RealPOICandidate[]> {
   const results: RealPOICandidate[] = [];
   const seenNames = new Set<string>();
@@ -223,20 +233,6 @@ async function fetchNominatimPlaces(
   const maxLat = (startLat + deltaLat).toFixed(5);
   const maxLon = (startLon + deltaLon).toFixed(5);
   const minLat = (startLat - deltaLat).toFixed(5);
-
-  const searchKeywords = [
-    'кофейня',
-    'кафе',
-    'пекарня',
-    'бульвар',
-    'парк',
-    'сквер',
-    'аллея',
-    'пиццерия',
-    'ресторан',
-    'достопримечательность',
-    'памятник',
-  ];
 
   const queryPromises = searchKeywords.map(async (kw) => {
     try {
@@ -302,18 +298,88 @@ async function fetchNominatimPlaces(
 
     let catName = 'Интересное место';
     const lowerName = cleanName.toLowerCase();
-    if (item.type === 'cafe' || (item.class === 'amenity' && item.type === 'cafe') || lowerName.includes('кофе') || lowerName.includes('coffee')) {
+    const itemType = (item.type || '').toLowerCase();
+    const itemClass = (item.class || '').toLowerCase();
+
+    if (
+      itemType === 'fast_food' ||
+      lowerName.includes('шаурм') ||
+      lowerName.includes('шаверм') ||
+      lowerName.includes('донер') ||
+      lowerName.includes('бургер') ||
+      lowerName.includes('kfc') ||
+      lowerName.includes('кфс') ||
+      lowerName.includes('додо') ||
+      lowerName.includes('бургер кинг') ||
+      lowerName.includes('пицц') ||
+      lowerName.includes('стритфуд') ||
+      lowerName.includes('чебурек') ||
+      lowerName.includes('блин') ||
+      lowerName.includes('драник')
+    ) {
+      catName = 'Фастфуд / Стритфуд';
+    } else if (
+      itemType === 'cafe' ||
+      (itemClass === 'amenity' && itemType === 'cafe') ||
+      lowerName.includes('кофе') ||
+      lowerName.includes('coffee')
+    ) {
       catName = 'Кофейня';
-    } else if (item.type === 'bakery' || lowerName.includes('пекарн') || lowerName.includes('булочн') || lowerName.includes('кондитер')) {
-      catName = 'Пекарня / Десерты';
-    } else if (item.type === 'park' || item.class === 'leisure' || lowerName.includes('парк')) {
-      catName = 'Парк / Сквер';
-    } else if (lowerName.includes('бульвар') || lowerName.includes('аллея')) {
+    } else if (
+      itemType === 'bakery' ||
+      lowerName.includes('пекарн') ||
+      lowerName.includes('булочн') ||
+      lowerName.includes('круассан') ||
+      lowerName.includes('выпечк')
+    ) {
+      catName = 'Пекарня / Выпечка';
+    } else if (
+      itemType === 'ice_cream' ||
+      lowerName.includes('морожен') ||
+      lowerName.includes('джелато') ||
+      lowerName.includes('кондитер')
+    ) {
+      catName = 'Десерты и сладости';
+    } else if (
+      lowerName.includes('бульвар') ||
+      lowerName.includes('набережн') ||
+      itemType === 'viewpoint' ||
+      lowerName.includes('смотров') ||
+      lowerName.includes('панорам')
+    ) {
       catName = 'Живописный бульвар';
-    } else if (item.type === 'restaurant' || item.type === 'fast_food' || item.type === 'pizzeria' || lowerName.includes('кафе') || lowerName.includes('пицц')) {
-      catName = 'Ресторан / Бистро';
-    } else if (item.class === 'tourism' || item.class === 'historic' || lowerName.includes('памятник') || lowerName.includes('мемориал')) {
+    } else if (
+      itemType === 'park' ||
+      itemClass === 'leisure' ||
+      lowerName.includes('парк') ||
+      lowerName.includes('сквер') ||
+      lowerName.includes('сад')
+    ) {
+      catName = 'Парк / Сквер';
+    } else if (
+      itemClass === 'tourism' ||
+      itemClass === 'historic' ||
+      lowerName.includes('памятник') ||
+      lowerName.includes('мемориал') ||
+      lowerName.includes('музей') ||
+      lowerName.includes('собор') ||
+      lowerName.includes('храм')
+    ) {
       catName = 'Достопримечательность';
+    } else if (
+      itemType === 'mall' ||
+      itemType === 'department_store' ||
+      lowerName.includes('торговый центр') ||
+      lowerName.includes('пассаж') ||
+      lowerName.includes('галерея')
+    ) {
+      catName = 'Магазины / ТЦ';
+    } else if (
+      itemType === 'restaurant' ||
+      lowerName.includes('ресторан') ||
+      lowerName.includes('бистро')
+    ) {
+      catName = 'Ресторан / Бистро';
     }
 
     const yandexUrl = `https://yandex.ru/maps/?text=${encodeURIComponent(cleanName + ' ' + shortAddress)}`;
@@ -332,7 +398,8 @@ async function fetchNominatimPlaces(
       yandex_url: yandexUrl,
       rating: undefined,
       reviews_count: undefined,
-      opening_hours: catName.includes('Парк') || catName.includes('бульвар') ? 'Круглосуточно' : 'Ежедневно 08:00 – 22:00',
+      opening_hours:
+        catName.includes('Парк') || catName.includes('бульвар') ? 'Круглосуточно' : 'Ежедневно 08:00 – 22:00',
       tags: getTagsForCategory(catName),
       reviews: [],
     });
@@ -401,24 +468,38 @@ async function searchYandexOrganizations(
           seenNames.add(normKey);
 
           let cat = 'Интересное место';
-          if (meta?.Categories && meta.Categories.length > 0) {
+          const lowerName = cleanName.toLowerCase();
+          if (
+            kw.includes('шаурм') ||
+            kw.includes('фастфуд') ||
+            kw.includes('бургер') ||
+            lowerName.includes('шаурм') ||
+            lowerName.includes('донер') ||
+            lowerName.includes('бургер') ||
+            lowerName.includes('kfc') ||
+            lowerName.includes('пицц')
+          ) {
+            cat = 'Фастфуд / Стритфуд';
+          } else if (meta?.Categories && meta.Categories.length > 0) {
             cat = meta.Categories[0].name;
-          } else if (cleanName.toLowerCase().includes('бульвар') || desc.toLowerCase().includes('бульвар')) {
+          } else if (lowerName.includes('бульвар') || desc.toLowerCase().includes('бульвар')) {
             cat = 'Живописный бульвар';
-          } else if (cleanName.toLowerCase().includes('проспект')) {
+          } else if (lowerName.includes('проспект')) {
             cat = 'Широкий проспект';
-          } else if (kw.includes('кофе')) {
+          } else if (kw.includes('кофе') || lowerName.includes('кофе')) {
             cat = 'Кофейня';
-          } else if (kw.includes('парк') || kw.includes('сквер')) {
+          } else if (kw.includes('пекарн') || lowerName.includes('пекарн')) {
+            cat = 'Пекарня / Выпечка';
+          } else if (kw.includes('парк') || kw.includes('сквер') || lowerName.includes('парк')) {
             cat = 'Парк / Сквер';
-          } else if (kw.includes('пекарн')) {
-            cat = 'Пекарня / Десерты';
           } else if (kw.includes('ресторан') || kw.includes('кафе')) {
             cat = 'Кафе / Ресторан';
           }
 
           const address = meta?.address || desc || 'В пешей доступности';
-          const hours = meta?.Hours?.text || (cat.includes('Парк') || cat.includes('бульвар') ? 'Круглосуточно' : 'Ежедневно 08:00 – 22:00');
+          const hours =
+            meta?.Hours?.text ||
+            (cat.includes('Парк') || cat.includes('бульвар') ? 'Круглосуточно' : 'Ежедневно 08:00 – 22:00');
 
           const orgId = meta?.id;
           const yandexUrl = orgId
@@ -555,8 +636,7 @@ async function fetchYmapsStreetsAndHouses(
 }
 
 /**
- * ГЛАВНЫЙ МЕТОД: Поиск РЕАЛЬНЫХ проверенных мест (кофейни, пекарни, парки, бульвары, достопримечательности).
- * Запускает поиск по ВСЕМ проверенным источникам параллельно и строго фильтрует нетуристические объекты.
+ * ГЛАВНЫЙ МЕТОД: Поиск РЕАЛЬНЫХ проверенных мест под выбранные форматы прогулки
  */
 export async function fetchRealPlacesAround(
   startLat: number,
@@ -574,24 +654,61 @@ export async function fetchRealPlacesAround(
     candidatePool.push(c);
   };
 
-  const keywords: string[] = [];
-  if (preferredActivities.includes('coffee')) keywords.push('кофейня', 'кофе');
-  if (preferredActivities.includes('food')) keywords.push('пекарня', 'кафе', 'пиццерия');
-  if (preferredActivities.includes('nature') || preferredActivities.includes('walk')) {
-    keywords.push('бульвар', 'парк', 'сквер', 'аллея');
+  const nomKeywords: string[] = [];
+  const ymapsKeywords: string[] = [];
+
+  const actList = preferredActivities.length > 0 ? preferredActivities : ['walk', 'coffee', 'views'];
+
+  if (actList.includes('fastfood')) {
+    nomKeywords.push('шаурма', 'фастфуд', 'бургерная', 'пиццерия');
+    ymapsKeywords.push('шаурма', 'фастфуд', 'бургерная', 'пиццерия');
   }
-  if (preferredActivities.includes('history') || preferredActivities.includes('photo')) {
-    keywords.push('достопримечательность', 'памятник', 'собор', 'музей');
+  if (actList.includes('coffee')) {
+    nomKeywords.push('кофейня', 'кофе');
+    ymapsKeywords.push('кофейня', 'кофе');
   }
-  if (keywords.length === 0) {
-    keywords.push('кофейня', 'бульвар', 'парк', 'кафе', 'сквер', 'пекарня', 'достопримечательность');
+  if (actList.includes('bakery')) {
+    nomKeywords.push('пекарня', 'булочная', 'кондитерская');
+    ymapsKeywords.push('пекарня', 'булочная');
+  }
+  if (actList.includes('sweets')) {
+    nomKeywords.push('мороженое', 'кондитерская', 'десерты');
+    ymapsKeywords.push('мороженое', 'кондитерская');
+  }
+  if (actList.includes('views') || actList.includes('walk')) {
+    nomKeywords.push('бульвар', 'аллея', 'набережная', 'смотровая площадка');
+    ymapsKeywords.push('бульвар', 'набережная', 'проспект');
+  }
+  if (actList.includes('nature') || actList.includes('dog_walk') || actList.includes('quiet')) {
+    nomKeywords.push('парк', 'сквер', 'сад');
+    ymapsKeywords.push('парк', 'сквер');
+  }
+  if (actList.includes('sights')) {
+    nomKeywords.push('достопримечательность', 'памятник', 'мемориал', 'музей');
+    ymapsKeywords.push('достопримечательность', 'памятник', 'музей');
+  }
+  if (actList.includes('shopping')) {
+    nomKeywords.push('торговый центр', 'универмаг');
+    ymapsKeywords.push('торговый центр');
+  }
+  if (actList.includes('date')) {
+    nomKeywords.push('кофейня', 'бульвар', 'сквер');
+    ymapsKeywords.push('кофейня', 'бульвар');
+  }
+
+  if (nomKeywords.length === 0) {
+    nomKeywords.push('бульвар', 'парк', 'кофейня', 'шаурма', 'пекарня', 'памятник');
+    ymapsKeywords.push('бульвар', 'парк', 'кофейня', 'шаурма');
   }
 
   // Запускаем ВСЕ источники параллельно через Promise.allSettled
   const [wikiRes, nomRes, ymapsBizRes, ymapsStreetRes] = await Promise.allSettled([
-    fetchWikipediaPlacesAround(startLat, startLon, radiusMeters),
-    fetchNominatimPlaces(startLat, startLon, radiusMeters),
-    searchYandexOrganizations(startLat, startLon, radiusMeters, keywords),
+    // Википедию опрашиваем только если выбраны достопримечательности или общая прогулка
+    actList.includes('sights') || actList.includes('walk') || actList.length === 0
+      ? fetchWikipediaPlacesAround(startLat, startLon, radiusMeters)
+      : Promise.resolve([]),
+    fetchNominatimPlaces(startLat, startLon, radiusMeters, nomKeywords),
+    searchYandexOrganizations(startLat, startLon, radiusMeters, ymapsKeywords),
     fetchYmapsStreetsAndHouses(startLat, startLon, radiusMeters),
   ]);
 
@@ -608,11 +725,11 @@ export async function fetchRealPlacesAround(
     for (const s of ymapsStreetRes.value) addCandidate(s);
   }
 
-  // Если кандидатов мало (малый поселок или узкий радиус), делаем расширенный поиск
+  // Если кандидатов мало, делаем расширенный поиск
   if (candidatePool.length < 5) {
     const widerRadius = radiusMeters * 1.8;
     const [widerNom, widerStreet] = await Promise.allSettled([
-      fetchNominatimPlaces(startLat, startLon, widerRadius),
+      fetchNominatimPlaces(startLat, startLon, widerRadius, nomKeywords),
       fetchYmapsStreetsAndHouses(startLat, startLon, widerRadius),
     ]);
     if (widerNom.status === 'fulfilled') {
@@ -641,7 +758,8 @@ export function enrichStopWithRealDetails(stop: RouteStop, index: number): Route
   const satUrl = stop.satellite_url || getSatellitePhotoUrl(stop.lat, stop.lon);
   const tags = stop.tags || getTagsForCategory(stop.category);
   const openingHours =
-    stop.opening_hours || (stop.category.includes('Парк') || stop.category.includes('бульвар') ? 'Круглосуточно' : 'Ежедневно 08:00 – 22:00');
+    stop.opening_hours ||
+    (stop.category.includes('Парк') || stop.category.includes('бульвар') ? 'Круглосуточно' : 'Ежедневно 08:00 – 22:00');
 
   const photosList: string[] = [];
   if (stop.photo_url) photosList.push(stop.photo_url);
@@ -662,7 +780,7 @@ export function enrichStopWithRealDetails(stop: RouteStop, index: number): Route
     satellite_url: satUrl,
     yandex_url: yandexUrl,
     tags,
-    reviews: [], // Никаких выдуманных отзывов
+    reviews: [],
     opening_hours: openingHours,
   };
 }

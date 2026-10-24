@@ -41,6 +41,9 @@ export const App: React.FC = () => {
     return [];
   });
 
+  // ID текущего отображаемого маршрута для синхронизации избранного
+  const [currentRouteId, setCurrentRouteId] = useState<string | null>(null);
+
   // Координаты старта (по умолчанию центр Москвы, Красная площадь)
   const [startLat, setStartLat] = useState<number>(55.751244);
   const [startLon, setStartLon] = useState<number>(37.618423);
@@ -335,7 +338,10 @@ export const App: React.FC = () => {
         startLat: reqStartLat,
         startLon: reqStartLon,
         custom_prompt: customPrompt,
+        isFavorite: false,
       };
+
+      setCurrentRouteId(newItem.id);
 
       setHistory((prev) => {
         const updated = [newItem, ...prev.filter((item) => Math.abs(item.timestamp - newItem.timestamp) > 3000)].slice(0, 30);
@@ -347,9 +353,35 @@ export const App: React.FC = () => {
     }
   };
 
+  // Переключение избранного для любого маршрута
+  const handleToggleFavorite = (id: string) => {
+    setHistory((prev) => {
+      const updated = prev.map((item) =>
+        item.id === id ? { ...item, isFavorite: !item.isFavorite } : item
+      );
+      localStorage.setItem('sbs_route_history', JSON.stringify(updated));
+      return updated;
+    });
+
+    if (currentRouteId === id) {
+      setRouteData((prev) => (prev ? { ...prev, isFavorite: !prev.isFavorite } : prev));
+    }
+  };
+
+  // Переключение избранного для текущего активного маршрута
+  const handleToggleCurrentRouteFavorite = () => {
+    if (currentRouteId) {
+      handleToggleFavorite(currentRouteId);
+    } else if (routeData) {
+      const nextFav = !routeData.isFavorite;
+      setRouteData((prev) => (prev ? { ...prev, isFavorite: nextFav } : prev));
+    }
+  };
+
   // Повтор маршрута из истории
   const handleSelectHistoryRoute = (item: RouteHistoryItem) => {
-    setRouteData(item.routeData);
+    setRouteData({ ...item.routeData, isFavorite: !!item.isFavorite });
+    setCurrentRouteId(item.id);
     setStartLat(item.startLat);
     setStartLon(item.startLon);
     setIsTrackingUser(false);
@@ -551,6 +583,8 @@ export const App: React.FC = () => {
         waypoints={waypoints}
         onRemoveWaypoint={handleRemoveWaypoint}
         onClearWaypoints={handleClearWaypoints}
+        isFavorite={Boolean(routeData?.isFavorite)}
+        onToggleFavorite={handleToggleCurrentRouteFavorite}
       />
 
       {/* 5. Модальное окно слоев карты (Схема / Спутник / Гибрид) */}
@@ -563,7 +597,7 @@ export const App: React.FC = () => {
         isDark={isDark}
       />
 
-      {/* 6. Модальное окно истории прогулок */}
+      {/* 6. Модальное окно истории прогулок и избранного */}
       <HistoryModal
         isOpen={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
@@ -571,6 +605,7 @@ export const App: React.FC = () => {
         onSelectRoute={handleSelectHistoryRoute}
         onDeleteRoute={handleDeleteHistoryRoute}
         onClearHistory={handleClearHistory}
+        onToggleFavorite={handleToggleFavorite}
       />
 
       {/* 7. Детальная карточка места с фото, рейтингом и отзывами */}

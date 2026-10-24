@@ -7,7 +7,6 @@ import {
   Dog,
   Clock,
   Footprints,
-  RotateCcw,
   Navigation,
   Sparkles,
   MapPin,
@@ -16,12 +15,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Star,
-  Plus,
-  X,
-  Check,
   Flag,
-  Target,
-  Calendar,
+  UtensilsCrossed,
+  Camera,
+  Trees,
+  Croissant,
+  ShoppingBag,
+  Armchair,
+  IceCream,
 } from 'lucide-react';
 import { calculateStopCount } from '../services/clientRouteEngine';
 import { TimeWheelPickerModal } from './TimeWheelPickerModal';
@@ -53,13 +54,24 @@ interface BottomSheetProps {
   waypoints?: DesiredWaypoint[];
   onRemoveWaypoint?: (id: string) => void;
   onClearWaypoints?: () => void;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
 }
 
-const SCENARIOS = [
-  { id: 'date', title: 'Свидание', icon: Heart, desc: 'Кофейни, виды и романтика' },
-  { id: 'tourist', title: 'Прогулка', icon: Landmark, desc: 'Архитектура и история' },
-  { id: 'coffee_walk', title: 'За кофе', icon: Coffee, desc: 'Кофе с собой и скверы' },
-  { id: 'dog_walk', title: 'С собакой', icon: Dog, desc: 'Парки и тихие аллеи' },
+// Единый полный список форматов прогулки (без мелких подписей, с разделением на кофейни, фастфуд, виды, природу и т.д.)
+const WALK_FORMATS = [
+  { id: 'walk', title: 'Прогулка', icon: Footprints },
+  { id: 'sights', title: 'Достопримечательности', icon: Landmark },
+  { id: 'coffee', title: 'Кофейни', icon: Coffee },
+  { id: 'fastfood', title: 'Фастфуд и стритфуд', icon: UtensilsCrossed },
+  { id: 'views', title: 'Красивые виды', icon: Camera },
+  { id: 'nature', title: 'Природа и парки', icon: Trees },
+  { id: 'bakery', title: 'Пекарни и выпечка', icon: Croissant },
+  { id: 'date', title: 'Свидание', icon: Heart },
+  { id: 'dog_walk', title: 'С собакой', icon: Dog },
+  { id: 'shopping', title: 'Магазины и ТЦ', icon: ShoppingBag },
+  { id: 'quiet', title: 'Тихий отдых', icon: Armchair },
+  { id: 'sweets', title: 'Сладкое и мороженое', icon: IceCream },
 ];
 
 const TIME_CHIPS = [
@@ -74,21 +86,12 @@ const TIME_CHIPS = [
   { label: '5ч+', value: 300 },
 ];
 
-const ACTIVITIES = [
-  { id: 'coffee', label: '☕ Кофе и десерт' },
-  { id: 'nature', label: '🌿 Зеленый парк' },
-  { id: 'photo', label: '📸 Красивые виды' },
-  { id: 'history', label: '🏛️ Памятники и история' },
-  { id: 'shopping', label: '🛍️ Книжные и сувениры' },
-  { id: 'pets', label: '🐕 Площадки для собак' },
-  { id: 'food', label: '🥐 Вкусный перекус' },
-];
-
 const QUICK_PROMPT_IDEAS = [
-  'Уютная кофейня с матчей и тихий парк',
-  'Книжные лавки и старинные дворики',
+  'Горячая шаурма и тихий сквер',
+  'Уютная кофейня и красивые виды',
+  'Пекарня со свежими круассанами',
   'Смотровые площадки и набережная',
-  'Красивый сквер и выпечка с корицей',
+  'Вдоль центрального бульвара',
 ];
 
 function getNowTimeStr(): string {
@@ -100,7 +103,6 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   startLat,
   startLon,
   startName,
-  startAddress,
   endLat = null,
   endLon = null,
   endName,
@@ -114,17 +116,18 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   onSubmit,
   onReset,
   isTrackingUser,
-  onToggleTracking,
   onOpenHistory,
-  historyCount,
   onOpenPlaceDetails,
   isDesktopCollapsed: isDesktopCollapsedProp,
   onToggleDesktopCollapse,
   waypoints = [],
   onRemoveWaypoint,
   onClearWaypoints,
+  isFavorite = false,
+  onToggleFavorite,
 }) => {
-  const [scenario, setScenario] = useState<string>('date');
+  // Единый выбор форматов прогулки (мультивыбор)
+  const [selectedFormats, setSelectedFormats] = useState<string[]>(['walk', 'coffee']);
   const [duration, setDuration] = useState<number>(60);
   const [isCircular, setIsCircular] = useState<boolean>(true);
 
@@ -133,7 +136,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   const [targetArrivalTime, setTargetArrivalTime] = useState<string>('18:00');
   const [currentTimeStr, setCurrentTimeStr] = useState<string>(getNowTimeStr());
 
-  // Время начала прогулки: сейчас (по умолчанию) или запланированное
+  // Время начала прогулки: сейчас или запланированное
   const [isStartTimeNow, setIsStartTimeNow] = useState<boolean>(true);
   const [customStartTime, setCustomStartTime] = useState<string>(() => {
     const d = new Date(Date.now() + 30 * 60000);
@@ -142,13 +145,13 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   const [isStartPickerOpen, setIsStartPickerOpen] = useState<boolean>(false);
   const [isArrivalPickerOpen, setIsArrivalPickerOpen] = useState<boolean>(false);
 
-  // Обновление текущего времени каждую минуту
+  // Обновление текущего времени
   useEffect(() => {
     const t = setInterval(() => setCurrentTimeStr(getNowTimeStr()), 30000);
     return () => clearInterval(t);
   }, []);
 
-  // Если задана конечная точка (финиш), отключаем круговой режим
+  // Если задана конечная точка, отключаем круговой режим
   useEffect(() => {
     if (endLat !== null && endLon !== null) {
       setIsCircular(false);
@@ -167,20 +170,18 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
     return `${finalH.toString().padStart(2, '0')}:${finalM.toString().padStart(2, '0')}`;
   })();
 
-  // При применении желаемого времени прибытия
   const handleApplyArrivalTime = (timeStr: string) => {
     setTargetArrivalTime(timeStr);
     const [th, tm] = timeStr.split(':').map(Number);
     const [sh, sm] = effectiveStartTime.split(':').map(Number);
     if (!isNaN(th) && !isNaN(tm) && !isNaN(sh) && !isNaN(sm)) {
-      let diff = (th * 60 + tm) - (sh * 60 + sm);
+      let diff = th * 60 + tm - (sh * 60 + sm);
       if (diff <= 0) diff += 24 * 60;
       const diffMins = Math.max(15, Math.min(360, diff));
       setDuration(diffMins);
     }
   };
 
-  // При применении времени старта
   const handleApplyStartTime = (timeStr: string) => {
     setCustomStartTime(timeStr);
     setIsStartTimeNow(false);
@@ -188,7 +189,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
       const [th, tm] = targetArrivalTime.split(':').map(Number);
       const [sh, sm] = timeStr.split(':').map(Number);
       if (!isNaN(th) && !isNaN(tm) && !isNaN(sh) && !isNaN(sm)) {
-        let diff = (th * 60 + tm) - (sh * 60 + sm);
+        let diff = th * 60 + tm - (sh * 60 + sm);
         if (diff <= 0) diff += 24 * 60;
         const diffMins = Math.max(15, Math.min(360, diff));
         setDuration(diffMins);
@@ -204,7 +205,6 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
     onToggleDesktopCollapse || (() => setInternalDesktopCollapsed(!internalDesktopCollapsed));
 
   const [customPrompt, setCustomPrompt] = useState<string>('');
-  const [selectedActivities, setSelectedActivities] = useState<string[]>(['coffee', 'nature']);
   const [manualStopCount, setManualStopCount] = useState<number>(0);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
 
@@ -234,10 +234,15 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
     else setSheetState('normal');
   };
 
-  const toggleActivity = (id: string) => {
-    setSelectedActivities((prev) =>
-      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
-    );
+  const toggleFormat = (id: string) => {
+    setSelectedFormats((prev) => {
+      if (prev.includes(id)) {
+        if (prev.length <= 1) return prev; // Сохраняем хотя бы один выбранный формат
+        return prev.filter((f) => f !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
   };
 
   const effectiveStops = calculateStopCount(duration, manualStopCount);
@@ -247,7 +252,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
       start_lat: startLat,
       start_lon: startLon,
       duration_minutes: duration,
-      scenario,
+      scenario: selectedFormats[0] || 'walk',
       is_circular: endLat !== null && endLon !== null ? false : isCircular,
       start_time: isStartTimeNow ? undefined : customStartTime,
       end_lat: endLat !== null ? endLat : undefined,
@@ -255,8 +260,8 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
       end_name: endName,
       target_arrival_time: timeMode === 'arrival' ? targetArrivalTime : calculatedFinishTime,
       custom_prompt: customPrompt.trim() || undefined,
-      activities: selectedActivities,
-      stop_count: effectiveStops, // СТРОГО гарантирует запрошенное количество остановок
+      activities: selectedFormats,
+      stop_count: effectiveStops,
       waypoints: waypoints.length > 0 ? waypoints : undefined,
     });
     setSheetState('normal');
@@ -286,7 +291,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         {isDesktopCollapsed ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
       </button>
 
-      {/* Островок шторки на мобилках */}
+      {/* Островок шторки на мобильных */}
       <div
         onClick={handlePillClick}
         onTouchStart={(e) => handleDragStart(e.touches[0].clientY)}
@@ -316,9 +321,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
           <>
             {/* Шапка с живыми часами реального времени */}
             <div className="flex items-center justify-between pt-2 md:pt-4">
-              <h2 className="text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
-                Куда пойдём?
-              </h2>
+              <h2 className="text-2xl font-black tracking-tight text-neutral-900 dark:text-white">Куда пойдём?</h2>
 
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 text-xs font-bold shadow-xs">
                 <Clock className="w-3.5 h-3.5 text-amber-500" />
@@ -403,7 +406,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   type="text"
                   value={customPrompt}
                   onChange={(e) => setCustomPrompt(e.target.value)}
-                  placeholder="Что хочется? Кофе, тихий парк, красивые виды..."
+                  placeholder="Что хочется? Вкусная шаурма, тихий парк, красивые виды..."
                   className="w-full text-sm pl-10 pr-9 py-3 bg-neutral-100 dark:bg-neutral-800/80 border border-transparent focus:border-amber-400 rounded-2xl text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none transition-all font-medium"
                 />
                 {customPrompt && (
@@ -432,13 +435,17 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               </div>
             </div>
 
-            {/* Точки по пути */}
+            {/* Обязательные точки пользователя */}
             {waypoints.length > 0 && (
               <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300/50 space-y-2">
                 <div className="flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-300">
                   <span>Обязательные места по пути ({waypoints.length}):</span>
                   {onClearWaypoints && (
-                    <button type="button" onClick={onClearWaypoints} className="text-amber-700 hover:underline cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={onClearWaypoints}
+                      className="text-amber-700 hover:underline cursor-pointer"
+                    >
                       Очистить
                     </button>
                   )}
@@ -465,68 +472,52 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               </div>
             )}
 
-            {/* 1. Сценарии */}
+            {/* ================= ЕДИНЫЙ РАЗДЕЛ: ФОРМАТ И ПОЖЕЛАНИЯ К ПРОГУЛКЕ ================= */}
             <div>
-              <span className="text-sm font-bold text-neutral-800 dark:text-neutral-200 block mb-2.5">
-                Формат прогулки
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                {SCENARIOS.map((sc) => {
-                  const Icon = sc.icon;
-                  const active = scenario === sc.id;
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-sm font-bold text-neutral-800 dark:text-neutral-200 block">
+                  Формат и атмосфера прогулки
+                </span>
+                <span className="text-[11px] text-neutral-400">Выберите всё, что душе угодно</span>
+              </div>
+
+              {/* Адаптивная сетка карточек форматов БЕЗ мелких подписей */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {WALK_FORMATS.map((fmt) => {
+                  const Icon = fmt.icon;
+                  const active = selectedFormats.includes(fmt.id);
                   return (
                     <button
-                      key={sc.id}
+                      key={fmt.id}
                       type="button"
-                      onClick={() => setScenario(sc.id)}
-                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                      onClick={() => toggleFormat(fmt.id)}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
                         active
                           ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 border-neutral-900 shadow-md ring-2 ring-amber-400'
-                          : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700 hover:border-neutral-300'
+                          : 'bg-neutral-50 dark:bg-neutral-800/80 text-neutral-800 dark:text-neutral-200 border-neutral-200/80 dark:border-neutral-700 hover:border-neutral-300'
                       }`}
                     >
-                      <div className="flex items-center gap-2 mb-1">
-                        <Icon className={`w-4 h-4 ${active ? 'text-amber-400 dark:text-amber-600' : 'text-neutral-500'}`} />
-                        <span className="font-extrabold text-xs md:text-sm">{sc.title}</span>
+                      <div
+                        className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                          active
+                            ? 'bg-amber-400/20 text-amber-400 dark:text-amber-600'
+                            : 'bg-neutral-200/60 dark:bg-neutral-700/60 text-neutral-500 dark:text-neutral-400'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
                       </div>
-                      <p className={`text-[11px] leading-tight line-clamp-1 ${active ? 'opacity-80' : 'text-neutral-500 dark:text-neutral-400'}`}>
-                        {sc.desc}
-                      </p>
+                      <span className="font-extrabold text-xs md:text-sm leading-tight select-none">
+                        {fmt.title}
+                      </span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* 2. Активности */}
-            <div>
-              <span className="text-sm font-bold text-neutral-800 dark:text-neutral-200 block mb-2">
-                Что включить в прогулку?
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {ACTIVITIES.map((act) => {
-                  const active = selectedActivities.includes(act.id);
-                  return (
-                    <button
-                      key={act.id}
-                      type="button"
-                      onClick={() => toggleActivity(act.id)}
-                      className={`text-xs md:text-sm px-3.5 py-2 rounded-xl border transition-all cursor-pointer font-medium ${
-                        active
-                          ? 'bg-amber-400 text-neutral-950 font-bold border-amber-400 shadow-sm'
-                          : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700 hover:border-neutral-300'
-                      }`}
-                    >
-                      {act.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 3. Время прогулки и планирование */}
+            {/* Время прогулки и планирование */}
             <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/70 dark:border-neutral-700/60 space-y-3.5">
-              {/* Выбор времени начала: Сейчас или Запланировать заранее */}
+              {/* Старт прогулки: Сейчас или запланировать */}
               <div className="flex items-center justify-between pb-2.5 border-b border-neutral-200/60 dark:border-neutral-700/60">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-neutral-800 dark:text-neutral-200">
                   <Clock className="w-3.5 h-3.5 text-amber-500" />
@@ -559,7 +550,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                 </div>
               </div>
 
-              {/* Переключатель: По времени vs Прибыть к определенному времени */}
+              {/* Переключатель: По времени vs Прибыть к */}
               <div className="flex items-center justify-between">
                 <div className="flex gap-1 bg-neutral-200/70 dark:bg-neutral-700 p-0.5 rounded-xl">
                   <button
@@ -611,7 +602,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                     ))}
                   </div>
 
-                  {/* Точный ползунок времени (от 15 до 360 минут с шагом 5 минут) */}
+                  {/* Ползунок времени */}
                   <div className="space-y-1.5 pt-1">
                     <div className="flex items-center justify-between text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                       <span>Точная настройка:</span>
@@ -649,7 +640,6 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   </div>
                 </>
               ) : (
-                /* Режим "Прибыть к определенному времени" */
                 <div className="space-y-2 py-1">
                   <div className="flex items-center justify-between">
                     <div>
@@ -674,7 +664,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               )}
             </div>
 
-            {/* 4. Настройка остановок */}
+            {/* Настройка остановок */}
             <div className="pt-1">
               <button
                 type="button"
@@ -750,12 +740,12 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
           /* ================= ЭКРАН ГОТОВОГО МАРШРУТА ================= */
           <>
             <div className="flex items-start justify-between pt-2 md:pt-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-extrabold uppercase tracking-wider text-amber-500">
+              <div className="min-w-0 flex-1 mr-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-black uppercase tracking-wider text-amber-500">
                     {routeData.scenario_title}
                   </span>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-bold truncate max-w-[170px]">
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-bold truncate max-w-[170px]">
                     {routeData.ai_model || 'StepByStep AI'}
                   </span>
                 </div>
@@ -792,22 +782,44 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              {/* Панель действий: Избранное + История + Изменить */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {onToggleFavorite && (
+                  <button
+                    type="button"
+                    onClick={onToggleFavorite}
+                    title={isFavorite ? 'Удалить из избранного' : 'Добавить прогулку в избранное'}
+                    className={`text-xs font-bold px-3 py-2 rounded-full transition-all cursor-pointer flex items-center gap-1.5 ${
+                      isFavorite
+                        ? 'bg-amber-400 text-neutral-950 shadow-sm'
+                        : 'bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200'
+                    }`}
+                  >
+                    <Star
+                      className={`w-3.5 h-3.5 ${
+                        isFavorite ? 'fill-neutral-950 text-neutral-950' : 'text-amber-500'
+                      }`}
+                    />
+                    <span className="hidden sm:inline">{isFavorite ? 'В избранном' : 'В избранное'}</span>
+                  </button>
+                )}
+
                 {onOpenHistory && (
                   <button
                     type="button"
                     onClick={onOpenHistory}
-                    title="История прошлых прогулок"
-                    className="text-xs font-bold px-3 py-2 rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors cursor-pointer flex items-center gap-1.5"
+                    title="История прогулок"
+                    className="text-xs font-bold p-2 sm:px-3 sm:py-2 rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors cursor-pointer flex items-center gap-1.5"
                   >
                     <History className="w-3.5 h-3.5" />
-                    <span>История</span>
+                    <span className="hidden sm:inline">История</span>
                   </button>
                 )}
+
                 <button
                   type="button"
                   onClick={onReset}
-                  className="text-xs font-bold px-3.5 py-2 rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors cursor-pointer"
+                  className="text-xs font-bold px-3 py-2 rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors cursor-pointer"
                 >
                   Изменить
                 </button>
@@ -819,7 +831,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/50 flex items-center justify-between text-xs font-bold text-rose-900 dark:text-rose-300">
                 <span className="flex items-center gap-2">
                   <Flag className="w-4 h-4 text-rose-600" />
-                  <span>Конечный пункт (Б): {routeData.end_point.name}</span>
+                  <span>Конечный пункт: {routeData.end_point.name}</span>
                 </span>
                 <span>Финиш</span>
               </div>

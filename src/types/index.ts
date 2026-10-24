@@ -87,13 +87,20 @@ export interface RouteResponse {
     name: string;
     address?: string;
   };
+  isFavorite?: boolean;
+}
+
+export interface WalkFormatItem {
+  id: string;
+  title: string;
+  icon: string;
 }
 
 export interface ScenarioItem {
   id: string;
   title: string;
   icon: string;
-  subtitle: string;
+  subtitle?: string;
 }
 
 export type MapLayerType = 'map' | 'satellite' | 'hybrid';
@@ -113,5 +120,6 @@ export interface RouteHistoryItem {
   startLat: number;
   startLon: number;
   custom_prompt?: string;
+  isFavorite?: boolean;
 }
 
