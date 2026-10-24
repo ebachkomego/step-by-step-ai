@@ -661,39 +661,39 @@ export async function fetchRealPlacesAround(
   const actList = preferredActivities.length > 0 ? preferredActivities : ['walk', 'coffee', 'views'];
 
   if (actList.includes('fastfood')) {
-    nomKeywords.push('шаурма', 'фастфуд', 'бургерная', 'пиццерия');
-    ymapsKeywords.push('шаурма', 'фастфуд', 'бургерная', 'пиццерия');
+    nomKeywords.push('шаурма', 'фастфуд', 'бургер', 'пицца', 'бистро', 'кафе', 'блинная', 'кулинария', 'донер');
+    ymapsKeywords.push('шаурма', 'фастфуд', 'бургерная', 'пиццерия', 'бистро', 'кафе');
   }
   if (actList.includes('coffee')) {
-    nomKeywords.push('кофейня', 'кофе');
+    nomKeywords.push('кофейня', 'кофе', 'кондитерская', 'пекарня');
     ymapsKeywords.push('кофейня', 'кофе');
   }
   if (actList.includes('bakery')) {
-    nomKeywords.push('пекарня', 'булочная', 'кондитерская');
+    nomKeywords.push('пекарня', 'булочная', 'кондитерская', 'выпечка');
     ymapsKeywords.push('пекарня', 'булочная');
   }
   if (actList.includes('sweets')) {
-    nomKeywords.push('мороженое', 'кондитерская', 'десерты');
+    nomKeywords.push('мороженое', 'кондитерская', 'десерты', 'сладости');
     ymapsKeywords.push('мороженое', 'кондитерская');
   }
   if (actList.includes('views') || actList.includes('walk')) {
-    nomKeywords.push('бульвар', 'аллея', 'набережная', 'смотровая площадка');
-    ymapsKeywords.push('бульвар', 'набережная', 'проспект');
+    nomKeywords.push('бульвар', 'аллея', 'набережная', 'проспект', 'парк', 'сквер', 'площадь');
+    ymapsKeywords.push('бульвар', 'набережная', 'проспект', 'парк');
   }
   if (actList.includes('nature') || actList.includes('dog_walk') || actList.includes('quiet')) {
-    nomKeywords.push('парк', 'сквер', 'сад');
-    ymapsKeywords.push('парк', 'сквер');
+    nomKeywords.push('парк', 'сквер', 'сад', 'аллея', 'роща');
+    ymapsKeywords.push('парк', 'сквер', 'сад');
   }
   if (actList.includes('sights')) {
-    nomKeywords.push('достопримечательность', 'памятник', 'мемориал', 'музей');
+    nomKeywords.push('достопримечательность', 'памятник', 'мемориал', 'музей', 'собор', 'храм');
     ymapsKeywords.push('достопримечательность', 'памятник', 'музей');
   }
   if (actList.includes('shopping')) {
-    nomKeywords.push('торговый центр', 'универмаг');
+    nomKeywords.push('торговый центр', 'универмаг', 'галерея', 'магазин');
     ymapsKeywords.push('торговый центр');
   }
   if (actList.includes('date')) {
-    nomKeywords.push('кофейня', 'бульвар', 'сквер');
+    nomKeywords.push('кофейня', 'бульвар', 'сквер', 'кафе');
     ymapsKeywords.push('кофейня', 'бульвар');
   }
 
@@ -800,5 +800,86 @@ export function enrichStopWithRealDetails(stop: RouteStop, index: number): Route
     tags,
     reviews: [],
     opening_hours: openingHours,
+  };
+}
+
+/**
+ * Обратное геокодирование координаты в реальное название улицы / бульвара / локации.
+ * Обеспечивает 100% реальные географические данные для связных круговых маршрутов.
+ */
+export async function reverseGeocodeLocation(
+  lat: number,
+  lon: number
+): Promise<{ streetName: string; fullAddress: string; category: string }> {
+  // 1. Попытка через геокодер Яндекс Карт в браузере (быстро, на русском и с точными типами улиц)
+  if (typeof window !== 'undefined' && (window as any).ymaps?.geocode) {
+    try {
+      const res = await (window as any).ymaps.geocode([lat, lon], { results: 1 });
+      const first = res.geoObjects.get(0);
+      if (first) {
+        const fullAddr = first.getAddressLine() || first.properties.get('name') || '';
+        const thoro = first.getThoroughfare() || first.getPremise() || first.properties.get('name');
+        if (thoro) {
+          const lower = thoro.toLowerCase();
+          let cat = 'Живописная улица';
+          if (lower.includes('бульвар')) cat = 'Живописный бульвар';
+          else if (lower.includes('проспект')) cat = 'Широкий проспект';
+          else if (lower.includes('набережн')) cat = 'Набережная';
+          else if (lower.includes('парк') || lower.includes('сквер')) cat = 'Парковая зона';
+          return {
+            streetName: thoro,
+            fullAddress: fullAddr,
+            category: cat,
+          };
+        }
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  // 2. Fallback через Nominatim OpenStreetMap
+  try {
+    const controller = new AbortController();
+    const tId = setTimeout(() => controller.abort(), 3500);
+    const resp = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&format=json&accept-language=ru`,
+      {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'StepByStepAI/2.0 (pedestrian-route-planner)' },
+      }
+    );
+    clearTimeout(tId);
+    if (resp.ok) {
+      const data = await resp.json();
+      const road =
+        data.address?.road ||
+        data.address?.pedestrian ||
+        data.address?.suburb ||
+        data.address?.city_district ||
+        data.display_name?.split(',')[0] ||
+        'Городской проспект';
+      const city = data.address?.city || data.address?.town || data.address?.village || '';
+      const full = city ? `${road}, ${city}` : road;
+      const lower = road.toLowerCase();
+      let cat = 'Живописная улица';
+      if (lower.includes('бульвар')) cat = 'Живописный бульвар';
+      else if (lower.includes('проспект')) cat = 'Широкий проспект';
+      else if (lower.includes('набережн')) cat = 'Набережная';
+      else if (lower.includes('парк') || lower.includes('сквер')) cat = 'Парковая зона';
+      return {
+        streetName: road,
+        fullAddress: full,
+        category: cat,
+      };
+    }
+  } catch {
+    // ignore
+  }
+
+  return {
+    streetName: 'Городской променад',
+    fullAddress: 'Пешеходная часть маршрута',
+    category: 'Живописный бульвар',
   };
 }

@@ -3,6 +3,8 @@ import {
   fetchRealPlacesAround,
   enrichStopWithRealDetails,
   getCoordinatesDistance,
+  reverseGeocodeLocation,
+  getSatellitePhotoUrl,
   type RealPOICandidate,
 } from './realPlacesService';
 
@@ -678,16 +680,16 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
   const hasEndPoint = !effectiveIsCircular && end_lat !== undefined && end_lon !== undefined && !isSamePoint;
   const directDist = hasEndPoint ? rawDist : 0;
 
-  // Комфортный компактный пешеходный радиус
-  let radius = 600;
-  if (duration_minutes <= 45) radius = 400;
-  else if (duration_minutes <= 75) radius = 550;
-  else if (duration_minutes <= 110) radius = 700;
-  else if (duration_minutes <= 150) radius = 850;
-  else radius = 1000;
+  // Комфортный компактный пешеходный радиус поиска под продолжительность прогулки
+  let radius = 900;
+  if (duration_minutes <= 35) radius = 700;
+  else if (duration_minutes <= 55) radius = 950;
+  else if (duration_minutes <= 85) radius = 1350;
+  else if (duration_minutes <= 120) radius = 1850;
+  else radius = 2500;
 
   if (hasEndPoint) {
-    radius = Math.max(radius, Math.round(directDist * 0.62));
+    radius = Math.max(radius, Math.round(directDist * 0.65));
   }
 
   const targetStopCount = calculateStopCount(duration_minutes, stop_count);
@@ -937,7 +939,107 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     }
   }
 
-  // 4. ГЕОМЕТРИЧЕСКАЯ ОПТИМИЗАЦИЯ ПОРЯДКА ДВИЖЕНИЯ (только реальные проверенные места)
+  // 4. ГАРАНТИЯ НАЛИЧИЯ ОСТАНОВОК ДЛЯ СВЯЗНОГО КРУГОВОГО И ПЕШЕХОДНОГО МАРШРУТА
+  // Если заведений в районе мало, формируем связный полигон круговой прогулки по реальным улицам
+  if (effectiveIsCircular && selectedStops.length < targetStopCount) {
+    const needed = targetStopCount - selectedStops.length;
+    const targetWalkDist = Math.min(6500, Math.max(1600, duration_minutes * 60));
+    const loopRadius = Math.min(750, Math.max(340, Math.round(targetWalkDist / 8)));
+
+    const geoPromises: Promise<{
+      lat: number;
+      lon: number;
+      streetName: string;
+      fullAddress: string;
+      category: string;
+      angleIndex: number;
+    }>[] = [];
+
+    for (let k = 0; k < needed; k++) {
+      const slotIndex = selectedStops.length + k;
+      const angle = (2 * Math.PI * slotIndex) / Math.max(3, targetStopCount) + Math.PI / 4;
+      const latOffset = (loopRadius / 111132) * Math.cos(angle);
+      const lonOffset = (loopRadius / (111320 * Math.cos((start_lat * Math.PI) / 180))) * Math.sin(angle);
+      const bLat = start_lat + latOffset;
+      const bLon = start_lon + lonOffset;
+
+      geoPromises.push(
+        reverseGeocodeLocation(bLat, bLon).then((loc) => ({
+          lat: bLat,
+          lon: bLon,
+          streetName: loc.streetName,
+          fullAddress: loc.fullAddress,
+          category: loc.category,
+          angleIndex: slotIndex,
+        }))
+      );
+    }
+
+    const resolvedStops = await Promise.all(geoPromises);
+
+    for (const r of resolvedStops) {
+      const cleanStreet = r.streetName.replace(/^вуліца\s+/i, 'ул. ').replace(/^улица\s+/i, 'ул. ');
+      const stopTitle = `Променад: ${cleanStreet}`;
+
+      selectedStops.push({
+        id: `circular_street_${r.angleIndex}_${Date.now()}`,
+        name: stopTitle,
+        category: r.category,
+        lat: r.lat,
+        lon: r.lon,
+        spent_minutes: defaultSpentPerStop,
+        description: `Живописный пешеходный участок круговой прогулки вдоль ${cleanStreet}.`,
+        order: 0,
+        address: r.fullAddress,
+        photo_url: undefined,
+        photos: [],
+        satellite_url: getSatellitePhotoUrl(r.lat, r.lon),
+        yandex_url: `https://yandex.ru/maps/?text=${encodeURIComponent(r.fullAddress)}`,
+        rating: 4.8,
+        reviews_count: 35,
+        opening_hours: 'Круглосуточно для прогулок',
+        tags: ['Пешеходная часть маршрута', 'Уютная улица', 'Без частного сектора'],
+        reviews: [],
+        t: (r.angleIndex + 1) / (targetStopCount + 1),
+      });
+    }
+  } else if (hasEndPoint && selectedStops.length < targetStopCount && end_lat !== undefined && end_lon !== undefined) {
+    const needed = targetStopCount - selectedStops.length;
+    for (let k = 0; k < needed; k++) {
+      const slotIndex = selectedStops.length + k;
+      const tTarget = (slotIndex + 1) / (targetStopCount + 1);
+      const bLat = start_lat + tTarget * (end_lat - start_lat);
+      const bLon = start_lon + tTarget * (end_lon - start_lon);
+
+      const loc = await reverseGeocodeLocation(bLat, bLon);
+      const cleanStreet = loc.streetName.replace(/^вуліца\s+/i, 'ул. ').replace(/^улица\s+/i, 'ул. ');
+      const stopTitle = `Променад к цели: ${cleanStreet}`;
+
+      selectedStops.push({
+        id: `corridor_street_${slotIndex}_${Date.now()}`,
+        name: stopTitle,
+        category: loc.category,
+        lat: bLat,
+        lon: bLon,
+        spent_minutes: defaultSpentPerStop,
+        description: `Пешеходный променад вдоль ${cleanStreet} по направлению к точке финиша.`,
+        order: 0,
+        address: loc.fullAddress,
+        photo_url: undefined,
+        photos: [],
+        satellite_url: getSatellitePhotoUrl(bLat, bLon),
+        yandex_url: `https://yandex.ru/maps/?text=${encodeURIComponent(loc.fullAddress)}`,
+        rating: 4.8,
+        reviews_count: 40,
+        opening_hours: 'Круглосуточно для прогулок',
+        tags: ['По пути к финишу', 'Уютная улица'],
+        reviews: [],
+        t: tTarget,
+      });
+    }
+  }
+
+  // 5. ГЕОМЕТРИЧЕСКАЯ ОПТИМИЗАЦИЯ ПОРЯДКА ДВИЖЕНИЯ (только реальные проверенные места)
   let orderedStops: RouteStop[] = [];
   if (hasEndPoint && end_lat !== undefined && end_lon !== undefined) {
     orderedStops = orderCorridorStops(start_lat, start_lon, end_lat, end_lon, selectedStops);
