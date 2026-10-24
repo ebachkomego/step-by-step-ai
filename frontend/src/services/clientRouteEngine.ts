@@ -3,6 +3,8 @@ import {
   fetchRealPlacesAround,
   enrichStopWithRealDetails,
   getCoordinatesDistance,
+  reverseGeocodeLocation,
+  getSatellitePhotoUrl,
   type RealPOICandidate,
 } from './realPlacesService';
 
@@ -92,29 +94,41 @@ export type CategoryGroup =
   | 'walk'
   | 'other';
 
+export function isMealCategory(cat: string, name: string = ''): boolean {
+  const combined = `${cat} ${name}`.toLowerCase();
+  return (
+    combined.includes('быстрое питание') ||
+    combined.includes('фастфуд') ||
+    combined.includes('шаурм') ||
+    combined.includes('шаверм') ||
+    combined.includes('донер') ||
+    combined.includes('бургер') ||
+    combined.includes('пицц') ||
+    combined.includes('стритфуд') ||
+    combined.includes('kfc') ||
+    combined.includes('кфс') ||
+    combined.includes('додо') ||
+    combined.includes('чебурек') ||
+    combined.includes('блин') ||
+    combined.includes('драник') ||
+    combined.includes('столов') ||
+    combined.includes('ресторан') ||
+    combined.includes('бистро') ||
+    combined.includes('кафе') ||
+    combined.includes('суши') ||
+    combined.includes('бургерн')
+  );
+}
+
 /**
  * Определение смысловой группы места для соблюдения точного соответствия форматам прогулки
  */
-export function getCategoryGroup(cat: string): CategoryGroup {
-  const c = cat.toLowerCase();
-  if (
-    c.includes('фастфуд') ||
-    c.includes('шаурм') ||
-    c.includes('шаверм') ||
-    c.includes('донер') ||
-    c.includes('бургер') ||
-    c.includes('kfc') ||
-    c.includes('кфс') ||
-    c.includes('пицц') ||
-    c.includes('стритфуд') ||
-    c.includes('додо') ||
-    c.includes('чебурек') ||
-    c.includes('блин') ||
-    c.includes('драник')
-  ) {
+export function getCategoryGroup(cat: string, name: string = ''): CategoryGroup {
+  const c = `${cat} ${name}`.toLowerCase();
+  if (isMealCategory(cat, name)) {
     return 'fastfood';
   }
-  if (c.includes('кофе') || c.includes('чай') || c.includes('coffee')) {
+  if (c.includes('кофе') || c.includes('чай') || c.includes('coffee') || c.includes('кофейн')) {
     return 'coffee';
   }
   if (c.includes('пекарн') || c.includes('булочн') || c.includes('выпечк') || c.includes('круассан')) {
@@ -128,7 +142,8 @@ export function getCategoryGroup(cat: string): CategoryGroup {
     c.includes('набережн') ||
     c.includes('бульвар') ||
     c.includes('панорам') ||
-    c.includes('вид')
+    c.includes('вид') ||
+    c.includes('фонтан')
   ) {
     return 'views';
   }
@@ -152,7 +167,8 @@ export function getCategoryGroup(cat: string): CategoryGroup {
     c.includes('собор') ||
     c.includes('костел') ||
     c.includes('архитектур') ||
-    c.includes('истор')
+    c.includes('истор') ||
+    c.includes('скульптур')
   ) {
     return 'sights';
   }
@@ -916,14 +932,15 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
         if (match && !selectedStops.some((s) => s.name.toLowerCase() === match.name.toLowerCase())) {
           const itemGroup = match.group;
 
-          // Контроль дублирования еды (не делать несколько шаурмичных подряд, если не просили)
-          const currentFastfoodCount = selectedStops.filter((s) => getCategoryGroup(s.category) === 'fastfood').length;
-          const currentCoffeeCount = selectedStops.filter((s) => getCategoryGroup(s.category) === 'coffee').length;
+          // Контроль дублирования еды (человек не может есть несколько раз за 1 час)
+          const isMeal = isMealCategory(match.cat, match.name);
+          const currentMealCount = selectedStops.filter((s) => isMealCategory(s.category, s.name)).length;
+          const currentCoffeeCount = selectedStops.filter((s) => getCategoryGroup(s.category, s.name) === 'coffee').length;
 
-          if (itemGroup === 'fastfood' && currentFastfoodCount >= 1 && !acts.includes('fastfood_multiple')) {
+          if (isMeal && currentMealCount >= 1 && !custom_prompt.toLowerCase().includes('тур')) {
             continue;
           }
-          if (itemGroup === 'coffee' && currentCoffeeCount >= 1 && !acts.includes('coffee_multiple')) {
+          if (itemGroup === 'coffee' && currentCoffeeCount >= 1 && !custom_prompt.toLowerCase().includes('тур')) {
             continue;
           }
 
@@ -983,26 +1000,45 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
 
     while (selectedStops.length < targetStopCount && remaining.length > 0) {
       let candidateIdx = -1;
+      const currentMealCount = selectedStops.filter((s) => isMealCategory(s.category, s.name)).length;
+      const isTourPrompt = custom_prompt.toLowerCase().includes('тур');
 
       // 1. Сначала ищем места, напрямую упомянутые пользователем в строке "Что хочется?"
       if (promptKeywords.length > 0) {
-        candidateIdx = remaining.findIndex((r) => matchesPrompt(r));
+        candidateIdx = remaining.findIndex((r) => {
+          if (isMealCategory(r.cat, r.name) && currentMealCount >= 1 && !isTourPrompt) return false;
+          return matchesPrompt(r);
+        });
       }
 
       // 2. Затем ищем место из форматов, которые еще не представлены на маршруте
       if (candidateIdx === -1) {
         for (const dg of desiredGroups) {
-          const hasGroup = selectedStops.some((s) => getCategoryGroup(s.category) === dg);
+          if (dg === 'fastfood' && currentMealCount >= 1 && !isTourPrompt) continue;
+          const hasGroup = selectedStops.some((s) => getCategoryGroup(s.category, s.name) === dg);
           if (!hasGroup) {
-            candidateIdx = remaining.findIndex((r) => r.group === dg);
+            candidateIdx = remaining.findIndex((r) => {
+              if (isMealCategory(r.cat, r.name) && currentMealCount >= 1 && !isTourPrompt) return false;
+              return getCategoryGroup(r.cat, r.name) === dg;
+            });
             if (candidateIdx !== -1) break;
           }
         }
       }
 
-      // 3. Если все желаемые уже представлены, берем не-еду (чтобы не дублировать фастфуд/кофе)
+      // 3. Если все желаемые представлены или еда уже есть, берем не-еду (парки, фонтаны, бульвары, скверы, памятники)
       if (candidateIdx === -1) {
-        candidateIdx = remaining.findIndex((r) => r.group !== 'fastfood' && r.group !== 'coffee');
+        candidateIdx = remaining.findIndex((r) => !isMealCategory(r.cat, r.name) && getCategoryGroup(r.cat, r.name) !== 'coffee');
+      }
+
+      // 4. Допускаем кофейню, если напиток еще не взят
+      if (candidateIdx === -1 && selectedStops.filter((s) => getCategoryGroup(s.category, s.name) === 'coffee').length === 0) {
+        candidateIdx = remaining.findIndex((r) => getCategoryGroup(r.cat, r.name) === 'coffee');
+      }
+
+      // 5. Если остались только заведения фастфуда/сытной еды, но сытный перекус уже добавлен — останавливаем отбор еды!
+      if (candidateIdx === -1 && currentMealCount >= 1 && !isTourPrompt) {
+        break;
       }
 
       if (candidateIdx === -1) {
@@ -1045,6 +1081,35 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
         tags: item.tags,
         reviews: item.reviews || [],
         t: item.t,
+      });
+    }
+
+    // Если реальных заведений для прогулки не хватило, добавляем проверенную пешеходную точку бульвара/сквера
+    if (selectedStops.length < targetStopCount && selectedStops.length > 0) {
+      const s0 = selectedStops[0];
+      const bearing = effectiveIsCircular ? 0.78 : 0;
+      const walkLat = s0.lat + 0.0035 * Math.cos(bearing);
+      const walkLon = s0.lon + 0.0055 * Math.sin(bearing);
+      const streetInfo = await reverseGeocodeLocation(walkLat, walkLon);
+      selectedStops.push({
+        id: `ymaps_walk_${Date.now()}`,
+        name: streetInfo.streetName,
+        category: streetInfo.category,
+        lat: walkLat,
+        lon: walkLon,
+        spent_minutes: defaultSpentPerStop,
+        description: `${streetInfo.streetName} — приятная пешеходная часть маршрута с широким освещенным тротуаром и местами для отдыха.`,
+        order: 0,
+        address: streetInfo.fullAddress,
+        photo_url: undefined,
+        photos: [],
+        satellite_url: getSatellitePhotoUrl(walkLat, walkLon),
+        yandex_url: `https://yandex.ru/maps/?text=${encodeURIComponent(streetInfo.streetName + ' ' + streetInfo.fullAddress)}`,
+        rating: undefined,
+        reviews_count: undefined,
+        opening_hours: 'Открыто для прогулок',
+        tags: ['Пешеходная зона', 'Широкий тротуар', 'Скамейки для отдыха'],
+        reviews: [],
       });
     }
   }

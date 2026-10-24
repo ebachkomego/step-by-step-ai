@@ -167,23 +167,47 @@ async def generate_route(request: RouteRequest):
 
     try:
         # 1. Формирование поисковых запросов для Яндекс Карт
-        search_queries: List[str] = []
+        # 1. Формирование сбалансированных поисковых запросов
+        food_queries: List[str] = []
+        outdoor_queries: List[str] = ["музыкальный фонтан", "сквер", "парк", "бульвар", "аллея"]
+        sights_queries: List[str] = ["достопримечательность", "памятник", "музей"]
+
+        active_acts = request.activities if request.activities else [request.scenario]
 
         # Пользовательское пожелание имеет наивысший приоритет
         if request.custom_prompt and request.custom_prompt.strip():
             clean_prompt = request.custom_prompt.strip()
-            search_queries.append(clean_prompt)
+            cp_lower = clean_prompt.lower()
+            if any(w in cp_lower for w in ["шаурм", "бургер", "фастфуд", "пицц", "еда", "поесть"]):
+                food_queries.insert(0, clean_prompt)
+            else:
+                outdoor_queries.insert(0, clean_prompt)
 
-        # Выбранные сценарии и форматы
-        active_acts = request.activities if request.activities else [request.scenario]
         for act in active_acts:
             kws = SCENARIO_KEYWORDS.get(act, [act])
-            for kw in kws:
-                if kw not in search_queries:
-                    search_queries.append(kw)
+            if act in ["fastfood", "coffee", "bakery", "sweets"]:
+                for kw in kws:
+                    if kw not in food_queries:
+                        food_queries.append(kw)
+            elif act in ["sights"]:
+                for kw in kws:
+                    if kw not in sights_queries:
+                        sights_queries.append(kw)
+            else:
+                for kw in kws:
+                    if kw not in outdoor_queries:
+                        outdoor_queries.append(kw)
+
+        # Сбалансированный пул запросов: 1-2 запроса на еду + обязательные запросы на прогулку/парки/фонтаны
+        search_queries: List[str] = []
+        if food_queries:
+            search_queries.extend(food_queries[:2])
+        search_queries.extend(outdoor_queries[:3])
+        if "sights" in active_acts and sights_queries:
+            search_queries.extend(sights_queries[:2])
 
         if not search_queries:
-            search_queries = ["бульвар", "кофейня", "парк"]
+            search_queries = ["бульвар", "парк", "музыкальный фонтан", "кофейня"]
 
         # Вычисление радиуса поиска от времени прогулки
         radius = min(3500.0, max(800.0, request.duration_minutes * 45.0))
@@ -209,13 +233,13 @@ async def generate_route(request: RouteRequest):
         all_candidates = []
         seen_names = set()
 
-        for q in search_queries[:4]:
+        for q in search_queries[:6]:
             found = await fetch_yandex_places(
                 lat=search_lat,
                 lon=search_lon,
                 query=q,
                 radius_meters=radius,
-                limit=10
+                limit=8
             )
             for p in found:
                 norm_name = p.name.lower().strip()
@@ -228,7 +252,7 @@ async def generate_route(request: RouteRequest):
             fallback_found = await fetch_yandex_places(
                 lat=search_lat,
                 lon=search_lon,
-                query="бульвар сквер кафе",
+                query="фонтан сквер бульвар",
                 radius_meters=radius * 1.5,
                 limit=10
             )
@@ -246,7 +270,15 @@ async def generate_route(request: RouteRequest):
             4 if request.duration_minutes <= 130 else 5
         )
 
-        # 3. Отбор остановок
+        # 3. Отбор остановок: строгий баланс форматов (МАКСИМУМ 1 прием пищи/фастфуд за прогулку)
+        def is_meal_spot(cat: str, name: str) -> bool:
+            c = f"{cat} {name}".lower()
+            return any(w in c for w in [
+                "быстрое питание", "фастфуд", "шаурм", "шаверм", "донер", "бургер",
+                "пицц", "стритфуд", "kfc", "кфс", "чебурек", "блин", "драник",
+                "столов", "ресторан", "бистро", "кафе", "суши", "бургерн"
+            ])
+
         selected_stops: List[RouteStop] = []
 
         # Добавляем обязательные пользовательские точки (waypoints)
@@ -269,12 +301,22 @@ async def generate_route(request: RouteRequest):
                     )
                 )
 
-        # Добираем из реальных кандидатов Яндекс Карт
+        current_meal_count = sum(1 for s in selected_stops if is_meal_spot(s.category, s.name))
+
+        # Добираем из реальных кандидатов Яндекс Карт с соблюдением баланса
         for cand in all_candidates:
             if len(selected_stops) >= target_stops_count:
                 break
             if any(s.name.lower() == cand.name.lower() for s in selected_stops):
                 continue
+
+            cand_is_meal = is_meal_spot(cand.category, cand.name)
+            # Человек не может есть 3 раза за 1 час! Максимум 1 заведение фастфуда/сытного питания
+            if cand_is_meal and current_meal_count >= 1:
+                continue
+
+            if cand_is_meal:
+                current_meal_count += 1
 
             revs = [
                 PlaceReview(

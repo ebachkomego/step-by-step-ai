@@ -428,6 +428,8 @@ async function searchYandexOrganizations(
             lowerName.includes('пицц')
           ) {
             cat = 'Фастфуд / Стритфуд';
+          } else if (lowerName.includes('фонтан') || lowerQ.includes('фонтан')) {
+            cat = 'Фонтан / Зона отдыха';
           } else if (meta?.Categories && meta.Categories.length > 0) {
             cat = meta.Categories[0].name;
           } else if (lowerName.includes('кофе') || lowerQ.includes('кофе')) {
@@ -602,34 +604,34 @@ export async function fetchRealPlacesAround(
     candidatePool.push(c);
   };
 
-  const ymapsKeywords: string[] = [];
+  const foodKeywords: string[] = [];
+  const outdoorKeywords: string[] = ['музыкальный фонтан', 'сквер', 'парк', 'бульвар', 'аллея'];
+  const sightsKeywords: string[] = ['достопримечательность', 'памятник', 'музей'];
 
   if (actList.includes('fastfood')) {
-    ymapsKeywords.push('шаурма', 'фастфуд', 'бургерная', 'пиццерия', 'бистро');
+    foodKeywords.push('шаурма', 'фастфуд');
   }
   if (actList.includes('coffee')) {
-    ymapsKeywords.push('кофейня', 'кофе');
+    foodKeywords.push('кофейня', 'кофе с собой');
   }
   if (actList.includes('bakery')) {
-    ymapsKeywords.push('пекарня', 'булочная', 'свежая выпечка');
+    foodKeywords.push('пекарня', 'свежая выпечка');
   }
   if (actList.includes('sweets')) {
-    ymapsKeywords.push('мороженое', 'кондитерская', 'десерты');
+    foodKeywords.push('мороженое', 'кондитерская');
   }
   if (actList.includes('views') || actList.includes('walk')) {
-    ymapsKeywords.push('бульвар', 'аллея', 'набережная', 'сквер');
+    outdoorKeywords.unshift('пешеходный бульвар', 'музыкальный фонтан', 'набережная');
   }
   if (actList.includes('nature') || actList.includes('dog_walk') || actList.includes('quiet')) {
-    ymapsKeywords.push('парк', 'сквер', 'сад');
-  }
-  if (actList.includes('sights')) {
-    ymapsKeywords.push('достопримечательность', 'памятник', 'музей');
+    outdoorKeywords.unshift('парк', 'сквер');
   }
   if (actList.includes('shopping')) {
-    ymapsKeywords.push('торговый центр', 'пассаж', 'галерея');
+    outdoorKeywords.push('торговый центр', 'пассаж');
   }
   if (actList.includes('date')) {
-    ymapsKeywords.push('кофейня', 'бульвар', 'уютное кафе');
+    foodKeywords.push('уютная кофейня');
+    outdoorKeywords.unshift('музыкальный фонтан', 'бульвар');
   }
 
   // ПРЯМОЙ УЧЕТ СТРОКИ "ЧТО ХОЧЕТСЯ?"
@@ -638,21 +640,35 @@ export async function fetchRealPlacesAround(
     const promptKeywords = [
       'шаурма', 'шаверма', 'донер', 'бургер', 'kfc', 'кфс', 'пицца', 'пиццерия', 'драники', 'чебурек',
       'кофе', 'кофейня', 'латте', 'капучино', 'раф', 'выпечка', 'пекарня', 'круассан', 'булочная',
-      'мороженое', 'десерт', 'парк', 'сквер', 'набережная', 'бульвар', 'аллея',
+      'мороженое', 'десерт', 'парк', 'сквер', 'набережная', 'бульвар', 'аллея', 'фонтан',
       'памятник', 'собор', 'музей', 'храм', 'торговый центр', 'магазин'
     ];
     for (const pk of promptKeywords) {
-      if (cpLower.includes(pk) && !ymapsKeywords.includes(pk)) {
-        ymapsKeywords.unshift(pk);
+      if (cpLower.includes(pk)) {
+        if (['шаурма', 'шаверма', 'донер', 'бургер', 'kfc', 'кфс', 'пицца', 'пиццерия', 'драники', 'чебурек', 'кофе', 'кофейня', 'латте', 'капучино', 'раф', 'выпечка', 'пекарня', 'круассан', 'булочная', 'мороженое', 'десерт'].includes(pk)) {
+          if (!foodKeywords.includes(pk)) foodKeywords.unshift(pk);
+        } else {
+          if (!outdoorKeywords.includes(pk)) outdoorKeywords.unshift(pk);
+        }
       }
-    }
-    if (!ymapsKeywords.includes(customPrompt.trim())) {
-      ymapsKeywords.unshift(customPrompt.trim());
     }
   }
 
+  // Сбалансированный сбор ключевых слов: МАКСИМУМ 1-2 запроса на еду + обязательные запросы на прогулку/парки/фонтаны
+  const ymapsKeywords: string[] = [];
+  if (foodKeywords.length > 0) {
+    ymapsKeywords.push(foodKeywords[0]);
+    if (foodKeywords.length > 1 && actList.includes('fastfood') && actList.includes('coffee')) {
+      ymapsKeywords.push(foodKeywords[1]);
+    }
+  }
+  ymapsKeywords.push(...outdoorKeywords.slice(0, 3));
+  if (actList.includes('sights')) {
+    ymapsKeywords.push(...sightsKeywords.slice(0, 2));
+  }
+
   if (ymapsKeywords.length === 0) {
-    ymapsKeywords.push('бульвар', 'парк', 'кофейня');
+    ymapsKeywords.push('музыкальный фонтан', 'парк', 'бульвар', 'кофейня');
   }
 
   // 1. ПРИОРИТЕТНЫЙ ШАГ: Получение 100% реальных данных напрямую из Яндекс Карт через эндпоинт /api/places/search
@@ -661,7 +677,7 @@ export async function fetchRealPlacesAround(
       ? 'http://localhost:8000/api/places/search'
       : '/api/places/search';
 
-    const queriesToRun = ymapsKeywords.slice(0, 3);
+    const queriesToRun = ymapsKeywords.slice(0, 5);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3500);
 
