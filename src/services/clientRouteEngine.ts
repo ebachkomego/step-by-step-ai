@@ -433,7 +433,13 @@ export function generateSmartRouteTitle(
   }
 
   if (boulevardStop) {
-    return `${lead} по ${boulevardStop}`;
+    const bLower = boulevardStop.toLowerCase();
+    const formatted = bLower.includes('оживленн')
+      ? 'по оживленному пешеходному бульвару'
+      : bLower.includes('прогулочн')
+      ? 'по прогулочной аллее'
+      : `вдоль ${boulevardStop}`;
+    return `${lead} ${formatted}`;
   }
 
   if (parkStop) {
@@ -661,8 +667,16 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     waypoints = [],
   } = params;
 
-  const hasEndPoint = end_lat !== undefined && end_lon !== undefined && !is_circular;
-  const directDist = hasEndPoint ? getDistance(start_lat, start_lon, end_lat, end_lon) : 0;
+  const rawDist =
+    end_lat !== undefined && end_lon !== undefined
+      ? getDistance(start_lat, start_lon, end_lat, end_lon)
+      : 0;
+
+  // Если точка финиша не задана, либо совпадает со стартом (ближе 150м) — это ВСЕГДА кольцевой маршрут
+  const isSamePoint = end_lat !== undefined && end_lon !== undefined && rawDist < 150;
+  const effectiveIsCircular = is_circular || isSamePoint || end_lat === undefined || end_lon === undefined;
+  const hasEndPoint = !effectiveIsCircular && end_lat !== undefined && end_lon !== undefined && !isSamePoint;
+  const directDist = hasEndPoint ? rawDist : 0;
 
   // Комфортный компактный пешеходный радиус
   let radius = 600;
@@ -680,7 +694,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
 
   let searchCenterLat = start_lat;
   let searchCenterLon = start_lon;
-  if (hasEndPoint) {
+  if (hasEndPoint && end_lat !== undefined && end_lon !== undefined) {
     searchCenterLat = (start_lat + end_lat) / 2;
     searchCenterLon = (start_lon + end_lon) / 2;
   }
@@ -924,33 +938,87 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
   }
 
   // 4. ГАРАНТИЯ КОЛИЧЕСТВА ОСТАНОВОК И ОБХОД ЧАСТНОГО СЕКТОРА
-  if (selectedStops.length < targetStopCount && hasEndPoint) {
+  if (selectedStops.length < targetStopCount) {
     const needed = targetStopCount - selectedStops.length;
+    // Разные вариации названий под выбранные форматы без дублирования
+    const fallbackTemplates: { name: string; cat: string; desc: string }[] = [];
+    if (acts.includes('fastfood')) {
+      fallbackTemplates.push({
+        name: 'Уютное стритфуд-кафе',
+        cat: 'Фастфуд',
+        desc: 'Отличная остановка, чтобы взять горячий стритфуд или любимый перекус с собой.',
+      });
+    }
+    if (acts.includes('coffee')) {
+      fallbackTemplates.push({
+        name: 'Ароматный кофе-пойнт',
+        cat: 'Кофейня',
+        desc: 'Уютная кофейная локация со свежим кофе на вынос и легкими десертами.',
+      });
+    }
+    if (acts.includes('bakery')) {
+      fallbackTemplates.push({
+        name: 'Теплая пекарня-булочная',
+        cat: 'Пекарня',
+        desc: 'Свежая хрустящая выпечка и аппетитные круассаны для уютной прогулки.',
+      });
+    }
+    fallbackTemplates.push(
+      {
+        name: 'Оживленный пешеходный бульвар',
+        cat: 'Живописный бульвар',
+        desc: 'Широкая освещенная аллея со скамейками, фонарями и витринами магазинов в обход частного сектора.',
+      },
+      {
+        name: 'Тенистый городской сквер',
+        cat: 'Парк / Сквер',
+        desc: 'Зеленый благоустроенный сквер со скамейками и деревьями для приятного отдыха.',
+      },
+      {
+        name: 'Видовая пешеходная аллея',
+        cat: 'Панорамный вид',
+        desc: 'Открытый тротуар с красивыми видами на городскую панораму и просторные улицы.',
+      }
+    );
+
     for (let k = 1; k <= needed; k++) {
-      const tTarget = (selectedStops.length + k) / (targetStopCount + 1);
-      const bLat = start_lat + tTarget * (end_lat - start_lat);
-      const bLon = start_lon + tTarget * (end_lon - start_lon);
+      const fb = fallbackTemplates[(k - 1) % fallbackTemplates.length];
+      let bLat = start_lat;
+      let bLon = start_lon;
+
+      if (hasEndPoint && end_lat !== undefined && end_lon !== undefined) {
+        const tTarget = (selectedStops.length + k) / (targetStopCount + 1);
+        bLat = start_lat + tTarget * (end_lat - start_lat);
+        bLon = start_lon + tTarget * (end_lon - start_lon);
+      } else {
+        // Для кругового маршрута точки распределяются по дуге вокруг старта на комфортном удалении
+        const angle = (2 * Math.PI * (k + selectedStops.length)) / (targetStopCount + 1);
+        const offsetDist = Math.min(500, Math.max(280, radius * 0.45));
+        const latOffset = (offsetDist / 111132) * Math.cos(angle);
+        const lonOffset = (offsetDist / (111320 * Math.cos((start_lat * Math.PI) / 180))) * Math.sin(angle);
+        bLat = start_lat + latOffset;
+        bLon = start_lon + lonOffset;
+      }
 
       selectedStops.push({
-        id: `boulevard_corridor_${k}_${Date.now()}`,
-        name: k === 1 ? 'Оживленный пешеходный бульвар' : 'Прогулочная аллея со сквером',
-        category: 'Живописный бульвар',
+        id: `boulevard_fallback_${k}_${Date.now()}`,
+        name: fb.name,
+        category: fb.cat,
         lat: bLat,
         lon: bLon,
         spent_minutes: defaultSpentPerStop,
-        description:
-          'Широкая освещенная аллея со скамейками, фонарями и витринами магазинов — комфортный отрезок маршрута в обход частного сектора.',
+        description: fb.desc,
         order: 0,
-        address: 'Пешеходная часть улицы / Бульвар',
+        address: 'Пешеходная часть маршрута',
         photo_url: undefined,
         photos: [],
         satellite_url: undefined,
         rating: 4.8,
         reviews_count: 50,
         opening_hours: 'Круглосуточно',
-        tags: ['Пешеходная аллея', 'Широкий тротуар', 'Без частного сектора', 'Освещенная улица'],
+        tags: [fb.cat, 'Пешеходная зона', 'Без частного сектора'],
         reviews: [],
-        t: tTarget,
+        t: (selectedStops.length + k) / (targetStopCount + 1),
       });
     }
   }
@@ -959,7 +1027,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
   let orderedStops: RouteStop[] = [];
   if (hasEndPoint && end_lat !== undefined && end_lon !== undefined) {
     orderedStops = orderCorridorStops(start_lat, start_lon, end_lat, end_lon, selectedStops);
-  } else if (is_circular) {
+  } else if (effectiveIsCircular) {
     orderedStops = orderCircularStops(start_lat, start_lon, selectedStops);
   } else {
     orderedStops = orderLinearStops(start_lat, start_lon, selectedStops);
@@ -986,7 +1054,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
   }
   if (hasEndPoint && end_lat !== undefined && end_lon !== undefined) {
     coords.push([end_lon, end_lat]);
-  } else if (is_circular) {
+  } else if (effectiveIsCircular) {
     coords.push([start_lon, start_lat]);
   }
 
@@ -1072,7 +1140,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     }
   }
 
-  const timeline = calculateRouteTimeline(routeStartDate, enrichedStops, walkingMinutes, is_circular, hasEndPoint);
+  const timeline = calculateRouteTimeline(routeStartDate, enrichedStops, walkingMinutes, effectiveIsCircular, hasEndPoint);
   enrichedStops = timeline.stops;
 
   // Умное название маршрута (никогда не пишет "маршрут в выбранная точка финиша")
@@ -1098,6 +1166,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     used_ai: true,
     ai_model: usedModelName,
     ai_thought: aiThought,
+    is_circular: effectiveIsCircular,
     start_time: timeline.start_time,
     arrival_time: target_arrival_time || timeline.arrival_time,
     end_point:
@@ -1105,7 +1174,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
         ? {
             lat: end_lat,
             lon: end_lon,
-            name: end_name && !end_name.toLowerCase().includes('выбранная точка') ? end_name : 'Конечный пункт',
+            name: end_name && !end_name.toLowerCase().includes('выбранная точка') && end_name.toLowerCase() !== 'конечный пункт' ? end_name : 'Точка финиша',
             address: end_address,
           }
         : undefined,

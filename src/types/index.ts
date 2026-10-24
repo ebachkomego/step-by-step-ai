@@ -81,6 +81,7 @@ export interface RouteResponse {
   notes?: string;
   start_time?: string;
   arrival_time?: string;
+  is_circular?: boolean;
   end_point?: {
     lat: number;
     lon: number;

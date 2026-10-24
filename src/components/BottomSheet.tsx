@@ -25,6 +25,7 @@ import {
   IceCream,
 } from 'lucide-react';
 import { calculateStopCount } from '../services/clientRouteEngine';
+import { getCoordinatesDistance } from '../services/realPlacesService';
 import { TimeWheelPickerModal } from './TimeWheelPickerModal';
 
 interface BottomSheetProps {
@@ -202,12 +203,19 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
     return () => clearInterval(t);
   }, []);
 
-  // Если задана конечная точка, отключаем круговой режим
+  // Если задана конечная точка, отключаем круговой режим только если она действительно далеко (>= 150м)
   useEffect(() => {
     if (endLat !== null && endLon !== null) {
-      setIsCircular(false);
+      const d = getCoordinatesDistance(startLat, startLon, endLat, endLon);
+      if (d < 150) {
+        setIsCircular(true);
+      } else {
+        setIsCircular(false);
+      }
+    } else {
+      setIsCircular(true);
     }
-  }, [endLat, endLon]);
+  }, [endLat, endLon, startLat, startLon]);
 
   const effectiveStartTime = isStartTimeNow ? currentTimeStr : customStartTime;
 
@@ -314,17 +322,22 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
 
   const effectiveStops = calculateStopCount(duration, manualStopCount);
 
+  const isFarEnd =
+    endLat !== null &&
+    endLon !== null &&
+    getCoordinatesDistance(startLat, startLon, endLat, endLon) >= 150;
+
   const handleBuildRoute = () => {
     onSubmit({
       start_lat: startLat,
       start_lon: startLon,
       duration_minutes: duration,
       scenario: selectedFormats[0] || 'walk',
-      is_circular: endLat !== null && endLon !== null ? false : isCircular,
+      is_circular: isFarEnd ? false : isCircular,
       start_time: isStartTimeNow ? undefined : customStartTime,
-      end_lat: endLat !== null ? endLat : undefined,
-      end_lon: endLon !== null ? endLon : undefined,
-      end_name: endName,
+      end_lat: isFarEnd && endLat !== null ? endLat : undefined,
+      end_lon: isFarEnd && endLon !== null ? endLon : undefined,
+      end_name: isFarEnd ? endName : undefined,
       target_arrival_time: timeMode === 'arrival' ? targetArrivalTime : calculatedFinishTime,
       custom_prompt: customPrompt.trim() || undefined,
       activities: selectedFormats,
@@ -418,50 +431,86 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                 </div>
               </div>
 
-              {/* Точка финиша */}
-              <div className="flex items-center justify-between text-xs pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60">
-                <div className="flex items-center gap-2.5 text-neutral-800 dark:text-neutral-200 min-w-0">
-                  <div className="w-7 h-7 rounded-xl bg-neutral-900/5 dark:bg-white/10 flex items-center justify-center shrink-0">
-                    <img src="/finish-flag.png" alt="Финиш" className="w-5 h-5 object-contain" />
+              {/* Точка финиша и выбор типа маршрута */}
+              <div className="pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2.5 text-neutral-800 dark:text-neutral-200 min-w-0">
+                    <div className="w-7 h-7 rounded-xl bg-neutral-900/5 dark:bg-white/10 flex items-center justify-center shrink-0">
+                      <img src="/finish-flag.png" alt="Финиш" className="w-5 h-5 object-contain" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="font-extrabold block text-xs">Формат маршрута:</span>
+                      {isFarEnd ? (
+                        <span className="text-rose-600 dark:text-rose-400 font-bold truncate block">
+                          🏁 К финишу: {endName && !endName.includes('Точка 5') && !endName.includes(',') ? endName : 'Выбранная точка'}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold block">
+                          🔄 Кольцевой (возврат на старт)
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <span className="font-extrabold block text-xs">Финиш (конечная точка):</span>
-                    {endLat !== null && endLon !== null ? (
-                      <span className="text-rose-600 dark:text-rose-400 font-bold truncate block">
-                        {endName && !endName.includes('Точка 5') && !endName.includes(',')
-                          ? endName
-                          : 'Выбранная точка финиша'}
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-neutral-500 dark:text-neutral-400 block">
-                        Круговой маршрут (вернуться на старт)
-                      </span>
-                    )}
-                  </div>
+
+                  {isFarEnd ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onClearEndPoint) onClearEndPoint();
+                        setIsCircular(true);
+                      }}
+                      className="px-2.5 py-1 text-xs font-bold text-neutral-500 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-neutral-200/60 dark:hover:bg-neutral-700 transition-colors cursor-pointer"
+                    >
+                      ✕ На старт
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={onStartPickingEndLocation}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer ${
+                        isPickingEndLocation
+                          ? 'bg-rose-600 text-white shadow-md animate-pulse'
+                          : 'bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+                      }`}
+                    >
+                      <Flag className="w-3.5 h-3.5" />
+                      <span>{isPickingEndLocation ? 'Кликните на карте' : 'Выбрать финиш'}</span>
+                    </button>
+                  )}
                 </div>
 
-                {endLat !== null && endLon !== null ? (
+                {/* Переключатель: Кольцевой vs К точке финиша */}
+                <div className="flex gap-1 bg-neutral-200/70 dark:bg-neutral-700/70 p-0.5 rounded-xl">
                   <button
                     type="button"
-                    onClick={onClearEndPoint}
-                    className="px-2.5 py-1 text-xs font-bold text-neutral-500 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-neutral-200/60 dark:hover:bg-neutral-700 transition-colors cursor-pointer"
-                  >
-                    ✕ Сбросить
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={onStartPickingEndLocation}
-                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer ${
-                      isPickingEndLocation
-                        ? 'bg-rose-600 text-white shadow-md animate-pulse'
-                        : 'bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+                    onClick={() => {
+                      setIsCircular(true);
+                      if (onClearEndPoint) onClearEndPoint();
+                    }}
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      !isFarEnd && isCircular
+                        ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-xs'
+                        : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
                     }`}
                   >
-                    <Flag className="w-3.5 h-3.5" />
-                    <span>{isPickingEndLocation ? 'Кликните на карте' : 'Выбрать финиш'}</span>
+                    <span>🔄 Возврат на старт (кольцевой)</span>
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCircular(false);
+                      if (!isFarEnd && onStartPickingEndLocation) onStartPickingEndLocation();
+                    }}
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      isFarEnd || !isCircular
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Flag className="w-3 h-3" />
+                    <span>К финишу</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -806,103 +855,129 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         ) : (
           /* ================= ЭКРАН ГОТОВОГО МАРШРУТА ================= */
           <>
-            <div className="flex items-start justify-between pt-2 md:pt-4">
-              <div className="min-w-0 flex-1 mr-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-black uppercase tracking-wider text-amber-500">
-                    {routeData.scenario_title}
-                  </span>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-bold truncate max-w-[170px]">
-                    {routeData.ai_model || 'StepByStep AI'}
-                  </span>
-                </div>
-
-                <h3 className="text-3xl font-black tracking-tight text-neutral-950 dark:text-white mt-1">
-                  {Math.floor(routeData.total_route_minutes / 60) > 0
-                    ? `${Math.floor(routeData.total_route_minutes / 60)} ч `
-                    : ''}
-                  {routeData.total_route_minutes % 60 ? `${routeData.total_route_minutes % 60} мин` : ''}
-                </h3>
-
-                {/* Разделение времени: Шаг vs Отдых */}
-                <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm text-neutral-600 dark:text-neutral-300 mt-2">
-                  <span className="flex items-center gap-1.5 font-semibold bg-neutral-100 dark:bg-neutral-800 px-3 py-1 rounded-xl">
-                    <Footprints className="w-4 h-4 text-neutral-400" />
-                    {(routeData.total_distance_meters / 1000).toFixed(1)} км шагом ({routeData.total_walking_minutes} мин.)
-                  </span>
-                  <span className="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-3 py-1 rounded-xl border border-amber-200/60 dark:border-amber-800/40">
-                    <Coffee className="w-4 h-4 text-amber-500" />
-                    {Math.max(0, routeData.total_route_minutes - routeData.total_walking_minutes)} мин. отдых
-                  </span>
-                </div>
-
-                {/* Расчет реального времени прибытия */}
-                {routeData.arrival_time && (
-                  <div className="mt-2 text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-amber-500" />
-                    <span>Старт: {routeData.start_time || 'сейчас'}</span>
-                    <span>→</span>
-                    <span className="text-amber-600 dark:text-amber-400">
-                      Прибытие на финиш: ~{routeData.arrival_time}
+            {/* Шапка готового маршрута */}
+            <div className="pt-2 md:pt-4 space-y-3">
+              {/* Верхняя строка: Название маршрута + Кнопки действий */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-500">
+                      {routeData.scenario_title}
                     </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-bold truncate">
+                      {routeData.ai_model || 'StepByStep AI'}
+                    </span>
+                    {routeData.is_circular ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 font-bold">
+                        🔄 Кольцевой
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400 font-bold">
+                        🏁 В одну сторону
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Панель действий: Избранное + История + Изменить */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {onToggleFavorite && (
+                    <button
+                      type="button"
+                      onClick={onToggleFavorite}
+                      title={isFavorite ? 'Удалить из избранного' : 'Добавить прогулку в избранное'}
+                      className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                        isFavorite
+                          ? 'bg-amber-400 text-neutral-950 shadow-sm'
+                          : 'bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200'
+                      }`}
+                    >
+                      <Star
+                        className={`w-3.5 h-3.5 ${
+                          isFavorite ? 'fill-neutral-950 text-neutral-950' : 'text-amber-500'
+                        }`}
+                      />
+                      <span className="hidden sm:inline">{isFavorite ? 'В избранном' : 'В избранное'}</span>
+                    </button>
+                  )}
+
+                  {onOpenHistory && (
+                    <button
+                      type="button"
+                      onClick={onOpenHistory}
+                      title="История прогулок"
+                      className="text-xs font-bold p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <History className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">История</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={onReset}
+                    className="text-xs font-bold px-3 py-1.5 rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
+                  >
+                    Изменить
+                  </button>
+                </div>
+              </div>
+
+              {/* Карточка ключевых метрик прогулки (гармоничная сетка без пустого места) */}
+              <div className="p-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800/80 border border-neutral-200/80 dark:border-neutral-700/80 space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800 shadow-xs text-center">
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Длительность</span>
+                    <span className="text-base sm:text-lg font-black text-neutral-900 dark:text-white">
+                      {Math.floor(routeData.total_route_minutes / 60) > 0 ? `${Math.floor(routeData.total_route_minutes / 60)}ч ` : ''}
+                      {routeData.total_route_minutes % 60 ? `${routeData.total_route_minutes % 60}м` : ''}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800 shadow-xs text-center">
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Дистанция</span>
+                    <span className="text-base sm:text-lg font-black text-neutral-900 dark:text-white">
+                      {(routeData.total_distance_meters / 1000).toFixed(1)} км
+                    </span>
+                    <span className="text-[10px] text-neutral-400 block">~{routeData.total_walking_minutes} мин. шаг</span>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800 shadow-xs text-center">
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Отдых</span>
+                    <span className="text-base sm:text-lg font-black text-amber-500">
+                      {Math.max(0, routeData.total_route_minutes - routeData.total_walking_minutes)} мин
+                    </span>
+                    <span className="text-[10px] text-neutral-400 block">{routeData.stops.length} ост.</span>
+                  </div>
+                </div>
+
+                {/* Таймлайн: Старт -> Финиш */}
+                {routeData.arrival_time && (
+                  <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800 text-xs font-bold text-neutral-800 dark:text-neutral-200 shadow-xs">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-neutral-400" />
+                      <span>Старт: <strong className="text-neutral-900 dark:text-white font-extrabold">{routeData.start_time || 'сейчас'}</strong></span>
+                    </div>
+                    <span className="text-neutral-400 font-bold">→</span>
+                    <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                      <Flag className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Прибытие: <strong className="font-extrabold">~{routeData.arrival_time}</strong></span>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Панель действий: Избранное + История + Изменить */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                {onToggleFavorite && (
-                  <button
-                    type="button"
-                    onClick={onToggleFavorite}
-                    title={isFavorite ? 'Удалить из избранного' : 'Добавить прогулку в избранное'}
-                    className={`text-xs font-bold px-3 py-2 rounded-full transition-all cursor-pointer flex items-center gap-1.5 ${
-                      isFavorite
-                        ? 'bg-amber-400 text-neutral-950 shadow-sm'
-                        : 'bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200'
-                    }`}
-                  >
-                    <Star
-                      className={`w-3.5 h-3.5 ${
-                        isFavorite ? 'fill-neutral-950 text-neutral-950' : 'text-amber-500'
-                      }`}
-                    />
-                    <span className="hidden sm:inline">{isFavorite ? 'В избранном' : 'В избранное'}</span>
-                  </button>
-                )}
-
-                {onOpenHistory && (
-                  <button
-                    type="button"
-                    onClick={onOpenHistory}
-                    title="История прогулок"
-                    className="text-xs font-bold p-2 sm:px-3 sm:py-2 rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors cursor-pointer flex items-center gap-1.5"
-                  >
-                    <History className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">История</span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={onReset}
-                  className="text-xs font-bold px-3 py-2 rounded-full bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors cursor-pointer"
-                >
-                  Изменить
-                </button>
-              </div>
+              {/* Карточка конечной точки маршрута */}
+              {routeData.end_point && routeData.end_point.name && routeData.end_point.name.toLowerCase() !== 'конечный пункт' && (
+                <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/50 flex items-center justify-between text-xs font-bold text-rose-900 dark:text-rose-300">
+                  <span className="flex items-center gap-2">
+                    <Flag className="w-4 h-4 text-rose-600" />
+                    <span>Финиш: {routeData.end_point.name}</span>
+                  </span>
+                  <span>Конечная точка</span>
+                </div>
+              )}
             </div>
-
-            {/* Карточка конечной точки маршрута */}
-            {routeData.end_point && (
-              <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/50 flex items-center justify-between text-xs font-bold text-rose-900 dark:text-rose-300">
-                <span className="flex items-center gap-2">
-                  <Flag className="w-4 h-4 text-rose-600" />
-                  <span>Конечный пункт: {routeData.end_point.name}</span>
-                </span>
-                <span>Финиш</span>
-              </div>
-            )}
 
             {/* Замысел прогулки */}
             {routeData.ai_thought && (

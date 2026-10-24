@@ -27,8 +27,8 @@
   }
 }
 
-/* Стилизация карты в темной теме (если используется стандартный слой без native dark tiles) */
-.dark .yandex-map-container:not(.satellite-active):not(.native-dark-layer) [class*="ground-pane"] {
+/* Стилизация карты в темной теме для официальных слоев */
+.dark .yandex-map-container:not(.satellite-active) [class*="ground-pane"] {
   filter: invert(92%) hue-rotate(185deg) brightness(85%) contrast(115%) !important;
 }
 
