@@ -86,8 +86,8 @@ export const MapView: React.FC<MapViewProps> = ({
     };
   }, [routeData, onSelectStop, onOpenPlaceDetails]);
 
-  // Хелпер применения типа карты (Схема, Спутник, Гибрид)
-  const applyMapType = (map: any, type: MapLayerType, _dark: boolean) => {
+  // Хелпер применения типа карты (Схема, Спутник, Гибрид, Схема темная)
+  const applyMapType = (map: any, type: MapLayerType, dark: boolean) => {
     if (!map || !window.ymaps) return;
 
     try {
@@ -96,7 +96,31 @@ export const MapView: React.FC<MapViewProps> = ({
       } else if (type === 'hybrid') {
         map.setType('yandex#hybrid');
       } else {
-        map.setType('yandex#map');
+        if (dark) {
+          try {
+            if (window.ymaps.layer && window.ymaps.layer.storage) {
+              if (!window.ymaps.layer.storage.get('custom#dark')) {
+                window.ymaps.layer.storage.add('custom#dark', function () {
+                  return new window.ymaps.Layer(
+                    'https://core-renderer-tiles.maps.yandex.net/tiles?l=map&theme=dark&%c&%l',
+                    { tileTransparent: false }
+                  );
+                });
+                window.ymaps.mapType.storage.add(
+                  'custom#dark',
+                  new window.ymaps.MapType('Схема (темная)', ['custom#dark'])
+                );
+              }
+              map.setType('custom#dark');
+              return;
+            }
+          } catch (layerErr) {
+            console.warn('Native dark layer registration fallback:', layerErr);
+          }
+          map.setType('yandex#map');
+        } else {
+          map.setType('yandex#map');
+        }
       }
     } catch (e) {
       console.warn('Could not set map type:', e);
@@ -471,7 +495,7 @@ export const MapView: React.FC<MapViewProps> = ({
     <div
       className={`absolute inset-0 w-full h-full yandex-map-container overflow-hidden ${
         isSatelliteOrHybrid ? 'satellite-active' : ''
-      } ${isDark && !isSatelliteOrHybrid ? 'native-dark-layer' : ''}`}
+      }`}
     >
       <div ref={containerRef} className="w-full h-full" />
 
