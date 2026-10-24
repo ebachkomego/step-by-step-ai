@@ -647,6 +647,112 @@ ${JSON.stringify(simplifiedCandidates, null, 2)}
 }
 
 /**
+ * Построение пешеходного маршрута исключительно через Яндекс Карты (MultiRoute с routingMode: 'pedestrian').
+ * Обеспечивает точный трек по реальным городским тротуарам, пешеходным переходам и аллеям.
+ */
+export async function buildYandexPedestrianRoute(
+  coords: [number, number][] // [[lon, lat], ...]
+): Promise<{ distanceMeters: number; walkingMinutes: number; geojson: any } | null> {
+  if (typeof window === 'undefined' || !(window as any).ymaps) return null;
+  const ymaps = (window as any).ymaps;
+
+  return new Promise((resolve) => {
+    ymaps.ready(() => {
+      try {
+        if (!ymaps.multiRouter?.MultiRoute) {
+          resolve(null);
+          return;
+        }
+
+        // Преобразование координат из [lon, lat] (GeoJSON) в [lat, lon] (Яндекс Карты)
+        const refPoints = coords.map((c) => [c[1], c[0]]);
+
+        const multiRoute = new ymaps.multiRouter.MultiRoute(
+          {
+            referencePoints: refPoints,
+            params: {
+              routingMode: 'pedestrian',
+            },
+          },
+          {
+            boundsAutoApply: false,
+          }
+        );
+
+        const timeout = setTimeout(() => {
+          resolve(null);
+        }, 6000);
+
+        multiRoute.model.events.add('requestsuccess', () => {
+          clearTimeout(timeout);
+          try {
+            const activeRoute = multiRoute.getActiveRoute();
+            if (!activeRoute) {
+              resolve(null);
+              return;
+            }
+
+            const distObj = activeRoute.properties.get('distance');
+            const durObj = activeRoute.properties.get('duration');
+            const distanceMeters = distObj ? Math.round(distObj.value) : 1000;
+            const walkingMinutes = durObj
+              ? Math.max(1, Math.round(durObj.value / 60))
+              : Math.max(1, Math.round(distanceMeters / 75));
+
+            const geoCoords: [number, number][] = [];
+            const paths = activeRoute.getPaths();
+            if (paths) {
+              paths.forEach((path: any) => {
+                const segments = path.getSegments();
+                if (segments) {
+                  segments.forEach((seg: any) => {
+                    const segPts = seg.getCoordinates();
+                    if (Array.isArray(segPts)) {
+                      segPts.forEach((pt: [number, number]) => {
+                        // GeoJSON standard: [lon, lat]
+                        geoCoords.push([pt[1], pt[0]]);
+                      });
+                    }
+                  });
+                }
+              });
+            }
+
+            if (geoCoords.length > 0) {
+              resolve({
+                distanceMeters,
+                walkingMinutes,
+                geojson: {
+                  type: 'Feature',
+                  geometry: {
+                    type: 'LineString',
+                    coordinates: geoCoords,
+                  },
+                },
+              });
+            } else {
+              resolve(null);
+            }
+          } catch (e) {
+            console.warn('Error reading Yandex pedestrian route:', e);
+            resolve(null);
+          }
+        });
+
+        multiRoute.model.events.add('requestfail', (err: any) => {
+          clearTimeout(timeout);
+          console.warn('Yandex multiRoute requestfail:', err);
+          resolve(null);
+        });
+      } catch (e) {
+        console.warn('Yandex multiRoute init error:', e);
+        resolve(null);
+      }
+    });
+  });
+}
+
+/**
  * ГЛАВНЫЙ ГЕНЕРАТОР МАРШРУТА
  */
 export async function generateRouteClientFallback(params: RouteRequest): Promise<RouteResponse> {
@@ -1063,7 +1169,7 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     return enriched;
   });
 
-  // 6. Построение пешеходного трека OSRM
+  // 6. Построение пешеходного трека через Яндекс Карты (MultiRoute pedestrian)
   const coords: [number, number][] = [[start_lon, start_lat]];
   for (const s of enrichedStops) {
     coords.push([s.lon, s.lat]);
@@ -1074,33 +1180,19 @@ export async function generateRouteClientFallback(params: RouteRequest): Promise
     coords.push([start_lon, start_lat]);
   }
 
-  const coordsStr = coords.map((c) => `${c[0].toFixed(6)},${c[1].toFixed(6)}`).join(';');
   let geojson: any = null;
   let distanceMeters = Math.min(2600, Math.round(walkingBudgetMin * 60));
   let walkingMinutes = walkingBudgetMin;
 
   try {
-    const osrmUrl = `https://routing.openstreetmap.de/routed-foot/route/v1/foot/${coordsStr}?overview=full&geometries=geojson`;
-    const controller = new AbortController();
-    const tId = setTimeout(() => controller.abort(), 4000);
-
-    const osrmResp = await fetch(osrmUrl, { signal: controller.signal });
-    clearTimeout(tId);
-
-    if (osrmResp.ok) {
-      const osrmData = await osrmResp.json();
-      if (osrmData.routes && osrmData.routes.length > 0) {
-        const r = osrmData.routes[0];
-        distanceMeters = Math.round(r.distance);
-        walkingMinutes = Math.max(1, Math.round(r.duration / 60));
-        geojson = {
-          type: 'Feature',
-          geometry: r.geometry,
-        };
-      }
+    const yRouteResult = await buildYandexPedestrianRoute(coords);
+    if (yRouteResult) {
+      geojson = yRouteResult.geojson;
+      distanceMeters = yRouteResult.distanceMeters;
+      walkingMinutes = yRouteResult.walkingMinutes;
     }
   } catch (e) {
-    console.warn('OSRM route fetch fallback to smooth interpolation:', e);
+    console.warn('Yandex pedestrian route calculation error:', e);
   }
 
   if (!geojson) {

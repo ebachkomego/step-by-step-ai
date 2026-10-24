@@ -40,7 +40,7 @@ export const CitySearchBar: React.FC<CitySearchBarProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Поиск через Yandex Maps Geocoder или Nominatim
+  // Поиск через Yandex Maps Geocoder & Search API
   useEffect(() => {
     const trimmed = query.trim();
     if (trimmed.length < 2) {
@@ -54,55 +54,90 @@ export const CitySearchBar: React.FC<CitySearchBarProps> = ({
 
       const items: SearchResultItem[] = [];
 
-      // 1. Попытка поиска через встроенный геокодер Яндекс Карт
-      if (typeof window !== 'undefined' && (window as any).ymaps?.geocode) {
+      // Поиск исключительно через сервисы Яндекс Карт (организации, адреса, подсказки)
+      if (typeof window !== 'undefined' && (window as any).ymaps) {
         try {
-          const res = await (window as any).ymaps.geocode(trimmed, { results: 5 });
-          const count = res.geoObjects.getLength();
-          for (let i = 0; i < count; i++) {
-            const obj = res.geoObjects.get(i);
-            const coords = obj.geometry.getCoordinates();
-            const name = obj.properties.get('name') || trimmed;
-            const desc = obj.properties.get('description') || '';
-            if (coords && coords.length === 2) {
-              items.push({
-                id: `ymaps_search_${i}`,
-                name,
-                description: desc,
-                lat: coords[0],
-                lon: coords[1],
-              });
-            }
-          }
-        } catch (e) {
-          console.warn('Ymaps geocode error, falling back:', e);
-        }
-      }
+          const ymaps = (window as any).ymaps;
+          await new Promise<void>((resolve) => ymaps.ready(resolve));
 
-      // 2. Если Яндекс не вернул результаты или недоступен — быстрый поиск через Nominatim
-      if (items.length === 0) {
-        try {
-          const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
-            trimmed
-          )}&format=json&limit=5&addressdetails=1`;
-          const resp = await fetch(url, {
-            headers: { 'User-Agent': 'StepByStepAI/2.0 (route-planner)' },
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            for (const d of data) {
-              const nameParts = d.display_name.split(',');
-              items.push({
-                id: `osm_${d.place_id}`,
-                name: nameParts[0].trim(),
-                description: nameParts.slice(1, 4).join(',').trim(),
-                lat: parseFloat(d.lat),
-                lon: parseFloat(d.lon),
+          // 1. Поиск с провайдером организаций 'yandex#search'
+          if (ymaps.geocode) {
+            try {
+              const res = await ymaps.geocode(trimmed, {
+                provider: 'yandex#search',
+                results: 6,
               });
+              const count = res.geoObjects.getLength();
+              for (let i = 0; i < count; i++) {
+                const obj = res.geoObjects.get(i);
+                const coords = obj.geometry?.getCoordinates();
+                const name = obj.properties.get('name') || trimmed;
+                const desc = obj.properties.get('description') || '';
+                if (coords && coords.length === 2) {
+                  items.push({
+                    id: `ymaps_biz_${i}`,
+                    name,
+                    description: desc,
+                    lat: coords[0],
+                    lon: coords[1],
+                  });
+                }
+              }
+            } catch (err) {
+              console.warn('Ymaps organization geocode error:', err);
             }
           }
+
+          // 2. Стандартный геокодер Яндекс Карт
+          if (items.length === 0 && ymaps.geocode) {
+            try {
+              const res = await ymaps.geocode(trimmed, { results: 6 });
+              const count = res.geoObjects.getLength();
+              for (let i = 0; i < count; i++) {
+                const obj = res.geoObjects.get(i);
+                const coords = obj.geometry?.getCoordinates();
+                const name = obj.properties.get('name') || trimmed;
+                const desc = obj.properties.get('description') || '';
+                if (coords && coords.length === 2) {
+                  items.push({
+                    id: `ymaps_geo_${i}`,
+                    name,
+                    description: desc,
+                    lat: coords[0],
+                    lon: coords[1],
+                  });
+                }
+              }
+            } catch (err) {
+              console.warn('Ymaps standard geocode error:', err);
+            }
+          }
+
+          // 3. Подсказки Яндекс Карт (ymaps.suggest)
+          if (items.length === 0 && ymaps.suggest && ymaps.geocode) {
+            try {
+              const suggests = await ymaps.suggest(trimmed, { results: 5 });
+              for (let i = 0; i < suggests.length; i++) {
+                const s = suggests[i];
+                const geo = await ymaps.geocode(s.value, { results: 1 });
+                const first = geo.geoObjects.get(0);
+                if (first) {
+                  const coords = first.geometry?.getCoordinates();
+                  if (coords && coords.length === 2) {
+                    items.push({
+                      id: `ymaps_sug_${i}`,
+                      name: s.displayName || first.properties.get('name') || s.value,
+                      description: first.properties.get('description') || s.value,
+                      lat: coords[0],
+                      lon: coords[1],
+                    });
+                  }
+                }
+              }
+            } catch {}
+          }
         } catch (e) {
-          console.warn('Nominatim fallback error:', e);
+          console.warn('Ymaps search failed:', e);
         }
       }
 
