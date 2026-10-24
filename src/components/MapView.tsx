@@ -89,8 +89,37 @@ export const MapView: React.FC<MapViewProps> = ({
     };
   }, [routeData, onSelectStop, onOpenPlaceDetails]);
 
-  // Хелпер применения типа карты (Схема, Спутник, Гибрид)
-  const applyMapType = (map: any, type: MapLayerType, _dark: boolean) => {
+  // Регистрация официального темного слоя Яндекс Карт (настоящие темные тайлы Yandex без зеленого искажения)
+  const ensureDarkMapTypeRegistered = (ymaps: any) => {
+    if (!ymaps?.layer?.storage || !ymaps?.mapType?.storage) return;
+    const darkKey = 'custom#dark';
+    try {
+      ymaps.layer.storage.add(darkKey, function () {
+        const layer = new ymaps.Layer(
+          'https://core-renderer-tiles.maps.yandex.net/tiles?l=map&theme=dark&%c&%l',
+          {
+            tileTransparent: false,
+          }
+        );
+        layer.getZoomRange = function () {
+          return ymaps.vow.resolve([0, 19]);
+        };
+        return layer;
+      });
+    } catch (_) {
+      // уже зарегистрирован
+    }
+
+    try {
+      const darkMapType = new ymaps.MapType('Схема (темная)', [darkKey]);
+      ymaps.mapType.storage.add(darkKey, darkMapType);
+    } catch (_) {
+      // уже зарегистрирован
+    }
+  };
+
+  // Хелпер применения типа карты (Схема, Спутник, Гибрид, Схема темная)
+  const applyMapType = (map: any, type: MapLayerType, dark: boolean) => {
     if (!map || !window.ymaps) return;
 
     try {
@@ -99,8 +128,17 @@ export const MapView: React.FC<MapViewProps> = ({
       } else if (type === 'hybrid') {
         map.setType('yandex#hybrid');
       } else {
-        // Стандартная надежная схема Яндекс Карт с полной доступностью тайлов во всех городах
-        map.setType('yandex#map');
+        if (dark) {
+          ensureDarkMapTypeRegistered(window.ymaps);
+          try {
+            map.setType('custom#dark');
+          } catch (err) {
+            console.warn('Fallback to standard map type:', err);
+            map.setType('yandex#map');
+          }
+        } else {
+          map.setType('yandex#map');
+        }
       }
     } catch (e) {
       console.warn('Could not set map type:', e);
@@ -121,12 +159,20 @@ export const MapView: React.FC<MapViewProps> = ({
         if (!containerRef.current) return;
 
         try {
+          ensureDarkMapTypeRegistered(window.ymaps);
+
+          let initialType = 'yandex#map';
+          if (mapType === 'satellite') initialType = 'yandex#satellite';
+          else if (mapType === 'hybrid') initialType = 'yandex#hybrid';
+          else if (isDark) initialType = 'custom#dark';
+
           const map = new window.ymaps.Map(
             containerRef.current,
             {
               center: [startLat, startLon],
               zoom: 14,
               controls: [],
+              type: initialType,
             },
             {
               suppressMapOpenBlock: true,
